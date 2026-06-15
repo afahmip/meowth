@@ -3,7 +3,7 @@ WORKDIR /app
 COPY service/go.mod service/go.sum ./
 RUN go mod download
 COPY service/ .
-RUN go build -o meowth .
+RUN go build -o meowth ./cmd/api
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates

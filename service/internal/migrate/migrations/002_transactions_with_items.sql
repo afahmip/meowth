@@ -13,8 +13,6 @@ CREATE TABLE IF NOT EXISTS transactions (
 	amount REAL NOT NULL,
 	currency TEXT NOT NULL DEFAULT 'USD',
 	transaction_date TEXT,
-	category_id INTEGER REFERENCES categories(id),
-	type TEXT NOT NULL DEFAULT 'expense',
 	raw_json TEXT,
 	gmail_message_id TEXT UNIQUE,
 	created_at TEXT NOT NULL DEFAULT (datetime('now'))

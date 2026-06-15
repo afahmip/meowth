@@ -43,11 +43,28 @@ func Run(db *sql.DB) {
 			log.Fatalf("read migration %s: %v", name, err)
 		}
 
-		if _, err := db.Exec(string(data)); err != nil {
-			log.Fatalf("apply migration %s: %v", name, err)
+		for _, stmt := range splitStatements(string(data)) {
+			if _, err := db.Exec(stmt); err != nil {
+				// ALTER TABLE ADD COLUMN is idempotent-safe: skip duplicate column errors
+				if strings.Contains(err.Error(), "duplicate column name") {
+					continue
+				}
+				log.Fatalf("apply migration %s: %v", name, err)
+			}
 		}
 
 		db.Exec(`INSERT INTO schema_migrations (name) VALUES (?)`, name)
 		log.Printf("applied migration: %s", name)
 	}
+}
+
+func splitStatements(sql string) []string {
+	var stmts []string
+	for _, s := range strings.Split(sql, ";") {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			stmts = append(stmts, s)
+		}
+	}
+	return stmts
 }
