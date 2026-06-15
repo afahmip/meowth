@@ -17,6 +17,10 @@ type Transaction struct {
 	TransactionDate *string           `json:"transaction_date"`
 	CategoryID      *int64            `json:"category_id"`
 	Type            string            `json:"type"`
+	AccountID       *int64            `json:"account_id"`
+	Account         *Account          `json:"account,omitempty"`
+	ToAccountID     *int64            `json:"to_account_id"`
+	ToAccount       *Account          `json:"to_account,omitempty"`
 	GmailMessageID  *string           `json:"gmail_message_id,omitempty"`
 	CreatedAt       string            `json:"created_at"`
 	Items           []TransactionItem `json:"items"`
@@ -30,6 +34,8 @@ type TransactionInput struct {
 	TransactionDate *string     `json:"transaction_date"`
 	CategoryID      *int64      `json:"category_id"`
 	Type            string      `json:"type"`
+	AccountID       *int64      `json:"account_id"`
+	ToAccountID     *int64      `json:"to_account_id"`
 	Items           []ItemInput `json:"items"`
 }
 

@@ -3,3 +3,5 @@ service/meowth.db
 bin/
 meowth
 NOTES.md
+*.postman_collection.json
+*.postman_environment.json

@@ -27,26 +27,50 @@ func seedIfEmpty(db *sql.DB) {
 		catIDs[name] = id
 	}
 
+	type accountSeed struct {
+		name     string
+		accType  string
+		currency string
+	}
+	accounts := []accountSeed{
+		{"DBS Bank", "bank", "SGD"},
+		{"GrabPay", "ewallet", "SGD"},
+		{"Apple Pay", "ewallet", "USD"},
+		{"Cash", "cash", "SGD"},
+	}
+	accIDs := map[string]int64{}
+	for _, a := range accounts {
+		res, err := db.Exec(`INSERT INTO accounts (name, type, currency) VALUES (?, ?, ?)`, a.name, a.accType, a.currency)
+		if err != nil {
+			log.Printf("seed account error: %v", err)
+			continue
+		}
+		id, _ := res.LastInsertId()
+		accIDs[a.name] = id
+	}
+
 	type itemSeed struct {
 		description string
 		amount      float64
 		category    string
 	}
 	type txnSeed struct {
-		source   string
-		merchant string
-		amount   float64
-		currency string
-		date     string
-		category string
-		txnType  string
-		items    []itemSeed
+		source      string
+		merchant    string
+		amount      float64
+		currency    string
+		date        string
+		category    string
+		txnType     string
+		account     string
+		toAccount   string
+		items       []itemSeed
 	}
 
 	txns := []txnSeed{
 		{
 			source: "receipt", merchant: "Starbucks", amount: 12.50, currency: "USD",
-			date: "2026-06-14", category: "Food & Drink", txnType: "expense",
+			date: "2026-06-14", category: "Food & Drink", txnType: "expense", account: "Apple Pay",
 			items: []itemSeed{
 				{"Caramel Macchiato", 6.50, "Food & Drink"},
 				{"Blueberry Muffin", 3.50, "Food & Drink"},
@@ -55,11 +79,11 @@ func seedIfEmpty(db *sql.DB) {
 		},
 		{
 			source: "receipt", merchant: "Grab", amount: 12.30, currency: "SGD",
-			date: "2026-06-13", category: "Transport", txnType: "expense",
+			date: "2026-06-13", category: "Transport", txnType: "expense", account: "GrabPay",
 		},
 		{
 			source: "receipt", merchant: "FairPrice", amount: 47.80, currency: "SGD",
-			date: "2026-06-12", category: "Groceries", txnType: "expense",
+			date: "2026-06-12", category: "Groceries", txnType: "expense", account: "DBS Bank",
 			items: []itemSeed{
 				{"Eggs (10pcs)", 3.50, "Groceries"},
 				{"Bread", 2.80, "Groceries"},
@@ -73,15 +97,15 @@ func seedIfEmpty(db *sql.DB) {
 		},
 		{
 			source: "gmail", merchant: "Netflix", amount: 15.98, currency: "USD",
-			date: "2026-06-10", category: "Subscriptions", txnType: "expense",
+			date: "2026-06-10", category: "Subscriptions", txnType: "expense", account: "Apple Pay",
 		},
 		{
 			source: "gmail", merchant: "Digital Ocean", amount: 24.00, currency: "USD",
-			date: "2026-06-01", category: "Software", txnType: "expense",
+			date: "2026-06-01", category: "Software", txnType: "expense", account: "Apple Pay",
 		},
 		{
 			source: "receipt", merchant: "McDonald's", amount: 17.80, currency: "SGD",
-			date: "2026-06-09", category: "Food & Drink", txnType: "expense",
+			date: "2026-06-09", category: "Food & Drink", txnType: "expense", account: "Cash",
 			items: []itemSeed{
 				{"Big Mac Meal", 9.90, "Food & Drink"},
 				{"McSpicy", 7.90, "Food & Drink"},
@@ -89,11 +113,11 @@ func seedIfEmpty(db *sql.DB) {
 		},
 		{
 			source: "gmail", merchant: "Spotify", amount: 9.99, currency: "USD",
-			date: "2026-06-01", category: "Subscriptions", txnType: "expense",
+			date: "2026-06-01", category: "Subscriptions", txnType: "expense", account: "Apple Pay",
 		},
 		{
 			source: "receipt", merchant: "Uniqlo", amount: 59.90, currency: "SGD",
-			date: "2026-06-07", category: "Shopping", txnType: "expense",
+			date: "2026-06-07", category: "Shopping", txnType: "expense", account: "DBS Bank",
 			items: []itemSeed{
 				{"Dry Stretch Shorts", 29.90, "Shopping"},
 				{"Heattech T-Shirt", 30.00, "Shopping"},
@@ -101,16 +125,29 @@ func seedIfEmpty(db *sql.DB) {
 		},
 		{
 			source: "manual", merchant: "Employer", amount: 4500.00, currency: "SGD",
-			date: "2026-06-01", category: "Income", txnType: "income",
+			date: "2026-06-01", category: "Income", txnType: "income", account: "DBS Bank",
+		},
+		// Transfer: DBS → GrabPay top-up
+		{
+			source: "manual", merchant: "GrabPay Top-up", amount: 50.00, currency: "SGD",
+			date: "2026-06-05", category: "Income", txnType: "expense",
+			account: "DBS Bank", toAccount: "GrabPay",
 		},
 	}
 
 	for _, t := range txns {
 		catID := catIDs[t.category]
+		var accID, toAccID *int64
+		if id, ok := accIDs[t.account]; ok {
+			accID = &id
+		}
+		if id, ok := accIDs[t.toAccount]; ok {
+			toAccID = &id
+		}
 		res, err := db.Exec(`
-			INSERT INTO transactions (source, merchant, amount, currency, transaction_date, category_id, type)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			t.source, t.merchant, t.amount, t.currency, t.date, catID, t.txnType,
+			INSERT INTO transactions (source, merchant, amount, currency, transaction_date, category_id, type, account_id, to_account_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			t.source, t.merchant, t.amount, t.currency, t.date, catID, t.txnType, accID, toAccID,
 		)
 		if err != nil {
 			log.Printf("seed txn error: %v", err)
@@ -129,5 +166,5 @@ func seedIfEmpty(db *sql.DB) {
 			}
 		}
 	}
-	log.Printf("seeded %d categories, %d transactions", len(categories), len(txns))
+	log.Printf("seeded %d categories, %d accounts, %d transactions", len(categories), len(accounts), len(txns))
 }

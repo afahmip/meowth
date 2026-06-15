@@ -30,14 +30,20 @@ func main() {
 		seedIfEmpty(db)
 	}
 
-	txnHandler := handler.NewTransactionHandler(store.NewTransactionStore(db))
+	accountStore := store.NewAccountStore(db)
+	txnHandler := handler.NewTransactionHandler(store.NewTransactionStore(db), accountStore)
 	catHandler := handler.NewCategoryHandler(store.NewCategoryStore(db))
+	accHandler := handler.NewAccountHandler(accountStore)
 
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 	})
+
+	mux.HandleFunc("GET /accounts", accHandler.List)
+	mux.HandleFunc("POST /accounts", accHandler.Create)
+	mux.HandleFunc("PATCH /accounts/{id}", accHandler.Update)
 
 	mux.HandleFunc("GET /categories", catHandler.List)
 	mux.HandleFunc("POST /categories", catHandler.Create)

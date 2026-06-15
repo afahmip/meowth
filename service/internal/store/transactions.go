@@ -19,18 +19,23 @@ func NewTransactionStore(db *sql.DB) *TransactionStore {
 
 type ListFilter struct {
 	CategoryID string
+	AccountID  string
 	From       string
 	To         string
 	Keyword    string
 }
 
-func (s *TransactionStore) List(ctx context.Context, f ListFilter) ([]model.Transaction, error) {
+func (s *TransactionStore) List(ctx context.Context, f ListFilter, accountStore *AccountStore) ([]model.Transaction, error) {
 	conditions := []string{}
 	args := []any{}
 
 	if f.CategoryID != "" {
 		conditions = append(conditions, "t.category_id = ?")
 		args = append(args, f.CategoryID)
+	}
+	if f.AccountID != "" {
+		conditions = append(conditions, "(t.account_id = ? OR t.to_account_id = ?)")
+		args = append(args, f.AccountID, f.AccountID)
 	}
 	if f.From != "" {
 		conditions = append(conditions, "t.transaction_date >= ?")
@@ -53,7 +58,8 @@ func (s *TransactionStore) List(ctx context.Context, f ListFilter) ([]model.Tran
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT DISTINCT t.id, t.source, t.merchant, t.amount, t.currency,
-		       t.transaction_date, t.category_id, t.type, t.gmail_message_id, t.created_at
+		       t.transaction_date, t.category_id, t.type,
+		       t.account_id, t.to_account_id, t.gmail_message_id, t.created_at
 		FROM transactions t
 		LEFT JOIN transaction_items ti ON ti.transaction_id = t.id
 		`+where+`
@@ -68,9 +74,11 @@ func (s *TransactionStore) List(ctx context.Context, f ListFilter) ([]model.Tran
 	var txns []model.Transaction
 	for rows.Next() {
 		var t model.Transaction
-		if err := rows.Scan(&t.ID, &t.Source, &t.Merchant, &t.Amount,
-			&t.Currency, &t.TransactionDate, &t.CategoryID,
-			&t.Type, &t.GmailMessageID, &t.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&t.ID, &t.Source, &t.Merchant, &t.Amount, &t.Currency,
+			&t.TransactionDate, &t.CategoryID, &t.Type,
+			&t.AccountID, &t.ToAccountID, &t.GmailMessageID, &t.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		t.Items = []model.TransactionItem{}
@@ -81,6 +89,9 @@ func (s *TransactionStore) List(ctx context.Context, f ListFilter) ([]model.Tran
 	}
 
 	if err := s.attachItems(ctx, txns); err != nil {
+		return nil, err
+	}
+	if err := s.attachAccounts(ctx, txns, accountStore); err != nil {
 		return nil, err
 	}
 	return txns, nil
@@ -116,6 +127,41 @@ func (s *TransactionStore) attachItems(ctx context.Context, txns []model.Transac
 	return nil
 }
 
+func (s *TransactionStore) attachAccounts(ctx context.Context, txns []model.Transaction, accountStore *AccountStore) error {
+	idSet := map[int64]struct{}{}
+	for _, t := range txns {
+		if t.AccountID != nil {
+			idSet[*t.AccountID] = struct{}{}
+		}
+		if t.ToAccountID != nil {
+			idSet[*t.ToAccountID] = struct{}{}
+		}
+	}
+	if len(idSet) == 0 {
+		return nil
+	}
+
+	ids := make([]int64, 0, len(idSet))
+	for id := range idSet {
+		ids = append(ids, id)
+	}
+
+	accounts, err := accountStore.GetByIDs(ctx, ids)
+	if err != nil {
+		return err
+	}
+
+	for i := range txns {
+		if txns[i].AccountID != nil {
+			txns[i].Account = accounts[*txns[i].AccountID]
+		}
+		if txns[i].ToAccountID != nil {
+			txns[i].ToAccount = accounts[*txns[i].ToAccountID]
+		}
+	}
+	return nil
+}
+
 func (s *TransactionStore) Create(ctx context.Context, input model.TransactionInput) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -124,10 +170,11 @@ func (s *TransactionStore) Create(ctx context.Context, input model.TransactionIn
 	defer tx.Rollback()
 
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO transactions (source, merchant, amount, currency, transaction_date, category_id, type)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO transactions (source, merchant, amount, currency, transaction_date, category_id, type, account_id, to_account_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		input.Source, input.Merchant, input.Amount, input.Currency,
 		input.TransactionDate, input.CategoryID, input.Type,
+		input.AccountID, input.ToAccountID,
 	)
 	if err != nil {
 		return 0, err
@@ -155,7 +202,9 @@ func (s *TransactionStore) Update(ctx context.Context, id string, input model.Tr
 		    currency = COALESCE(NULLIF(?, ''), currency),
 		    transaction_date = COALESCE(?, transaction_date),
 		    category_id = COALESCE(?, category_id),
-		    type = COALESCE(NULLIF(?, ''), type)
+		    type = COALESCE(NULLIF(?, ''), type),
+		    account_id = COALESCE(?, account_id),
+		    to_account_id = COALESCE(?, to_account_id)
 		WHERE id = ?`,
 		input.Merchant,
 		input.Amount, input.Amount,
@@ -163,6 +212,8 @@ func (s *TransactionStore) Update(ctx context.Context, id string, input model.Tr
 		input.TransactionDate,
 		input.CategoryID,
 		input.Type,
+		input.AccountID,
+		input.ToAccountID,
 		id,
 	)
 	if err != nil {

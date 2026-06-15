@@ -9,21 +9,23 @@ import (
 )
 
 type TransactionHandler struct {
-	store *store.TransactionStore
+	store        *store.TransactionStore
+	accountStore *store.AccountStore
 }
 
-func NewTransactionHandler(s *store.TransactionStore) *TransactionHandler {
-	return &TransactionHandler{store: s}
+func NewTransactionHandler(s *store.TransactionStore, as *store.AccountStore) *TransactionHandler {
+	return &TransactionHandler{store: s, accountStore: as}
 }
 
 func (h *TransactionHandler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	txns, err := h.store.List(r.Context(), store.ListFilter{
 		CategoryID: q.Get("category_id"),
+		AccountID:  q.Get("account_id"),
 		From:       q.Get("from"),
 		To:         q.Get("to"),
 		Keyword:    q.Get("q"),
-	})
+	}, h.accountStore)
 	if err != nil {
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
