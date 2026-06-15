@@ -1,0 +1,5 @@
+# flyctl launch added from .gitignore
+**/service/.env
+**/service/meowth.db
+**/bin
+fly.toml

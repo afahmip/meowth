@@ -1,0 +1,5 @@
+service/.env
+service/meowth.db
+bin/
+meowth
+NOTES.md
