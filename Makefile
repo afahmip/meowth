@@ -2,7 +2,7 @@
 
 run:
 	-lsof -ti :8080 | xargs kill -9 2>/dev/null
-	cd service && env $$(cat .env | grep -v '^#' | xargs) go run ./cmd/api
+	cd service && set -a && . ./.env && set +a && go run ./cmd/api
 
 build:
 	cd service && go build -o ../bin/meowth ./cmd/api

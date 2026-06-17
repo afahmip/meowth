@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/afahmip/meowth/internal/handler"
 	"github.com/afahmip/meowth/internal/migrate"
@@ -34,6 +35,7 @@ func main() {
 	txnHandler := handler.NewTransactionHandler(store.NewTransactionStore(db), accountStore)
 	catHandler := handler.NewCategoryHandler(store.NewCategoryStore(db))
 	accHandler := handler.NewAccountHandler(accountStore)
+	receiptHandler := handler.NewReceiptHandler(store.NewReceiptStore(db))
 
 	mux := http.NewServeMux()
 
@@ -54,6 +56,13 @@ func main() {
 	mux.HandleFunc("PATCH /transactions/{id}", txnHandler.Update)
 	mux.HandleFunc("POST /transactions/{id}/items", txnHandler.AddItems)
 	mux.HandleFunc("PATCH /transactions/{id}/items/{item_id}", txnHandler.UpdateItem)
+
+	mux.HandleFunc("POST /receipts/analyze", http.TimeoutHandler(
+		http.HandlerFunc(receiptHandler.Analyze),
+		5*time.Minute,
+		"request timed out",
+	).ServeHTTP)
+	mux.HandleFunc("PATCH /receipts/{id}/transaction", receiptHandler.AssignTransaction)
 
 	port := os.Getenv("PORT")
 	if port == "" {
