@@ -25,10 +25,10 @@ import (
 )
 
 type ReceiptHandler struct {
-	store *store.ReceiptStore
+	store *store.ReceiptImageStore
 }
 
-func NewReceiptHandler(s *store.ReceiptStore) *ReceiptHandler {
+func NewReceiptHandler(s *store.ReceiptImageStore) *ReceiptHandler {
 	return &ReceiptHandler{store: s}
 }
 
@@ -57,7 +57,7 @@ func (h *ReceiptHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 	}
 	mediaType := extensionToMediaType(ext)
 
-	claudeResponse, err := analyzeWithClaude(r.Context(), imageBytes, mediaType)
+	claudeResponse, err := analyzeImageWithClaude(r.Context(), imageBytes, mediaType)
 	if err != nil {
 		log.Printf("claude analysis error: %v", err)
 		http.Error(w, "failed to analyze receipt", http.StatusInternalServerError)
@@ -68,7 +68,7 @@ func (h *ReceiptHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 	json.Unmarshal([]byte(claudeResponse), &txn)
 
 	filename := generateFilename(txn.TransactionDate, txn.Merchant, ext)
-	receiptID, err := h.store.Create(r.Context(), filename, claudeResponse)
+	receiptID, err := h.store.Create(r.Context(), filename, minifyJSON(claudeResponse))
 	if err != nil {
 		log.Printf("db insert error: %v", err)
 		http.Error(w, "db error", http.StatusInternalServerError)
@@ -85,9 +85,21 @@ func (h *ReceiptHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *ReceiptHandler) AssignTransaction(w http.ResponseWriter, r *http.Request) {
-	receiptID := r.PathValue("id")
+func (h *ReceiptHandler) List(w http.ResponseWriter, r *http.Request) {
+	items, err := h.store.List(r.Context())
+	if err != nil {
+		log.Printf("list receipt images error: %v", err)
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	if items == nil {
+		items = []model.AnalyzedReceiptImage{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(items)
+}
 
+func (h *ReceiptHandler) AssignTransaction(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		TransactionID int64 `json:"transaction_id"`
 	}
@@ -96,7 +108,7 @@ func (h *ReceiptHandler) AssignTransaction(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := h.store.AssignTransaction(r.Context(), mustParseID(receiptID), input.TransactionID); err != nil {
+	if err := h.store.AssignTransaction(r.Context(), mustParseID(r.PathValue("id")), input.TransactionID); err != nil {
 		log.Printf("assign transaction error: %v", err)
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
@@ -105,13 +117,7 @@ func (h *ReceiptHandler) AssignTransaction(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func mustParseID(s string) int64 {
-	var id int64
-	fmt.Sscan(s, &id)
-	return id
-}
-
-func analyzeWithClaude(ctx context.Context, imageBytes []byte, mediaType string) (string, error) {
+func analyzeImageWithClaude(ctx context.Context, imageBytes []byte, mediaType string) (string, error) {
 	client := anthropic.NewClient()
 	encoded := base64.StdEncoding.EncodeToString(imageBytes)
 
@@ -214,13 +220,24 @@ func (h *ReceiptHandler) uploadToDrive(receiptID int64, filename string, imageBy
 	}
 
 	driveURL := "https://drive.google.com/file/d/" + created.Id + "/view"
-
 	if err := h.store.UpdateDriveURL(context.Background(), receiptID, driveURL); err != nil {
 		log.Printf("receipt %d: update drive url error: %v", receiptID, err)
-		return
 	}
-
 	log.Printf("receipt %d: uploaded to drive: %s", receiptID, driveURL)
+}
+
+func minifyJSON(s string) string {
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, []byte(s)); err != nil {
+		return s
+	}
+	return buf.String()
+}
+
+func mustParseID(s string) int64 {
+	var id int64
+	fmt.Sscan(s, &id)
+	return id
 }
 
 func generateFilename(receiptDate, merchant, ext string) string {

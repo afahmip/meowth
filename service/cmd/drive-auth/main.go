@@ -14,6 +14,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
+	"google.golang.org/api/gmail/v1"
 )
 
 func main() {
@@ -26,7 +27,7 @@ func main() {
 	cfg := &oauth2.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
-		Scopes:       []string{drive.DriveFileScope},
+		Scopes:       []string{drive.DriveFileScope, gmail.GmailReadonlyScope},
 		Endpoint:     google.Endpoint,
 		RedirectURL:  "http://localhost:9999/callback",
 	}
