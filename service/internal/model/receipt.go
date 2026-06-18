@@ -1,12 +1,12 @@
 package model
 
 type AnalyzedReceiptImage struct {
-	ID            int64               `json:"id"`
-	Filename      string              `json:"filename"`
-	DriveURL      *string             `json:"drive_url,omitempty"`
-	TransactionID *int64              `json:"transaction_id,omitempty"`
-	Transaction   *ReceiptTransaction `json:"transaction,omitempty"`
-	CreatedAt     string              `json:"created_at"`
+	ID            int64                `json:"id"`
+	Filename      string               `json:"filename"`
+	DriveURL      *string              `json:"drive_url,omitempty"`
+	TransactionID *int64               `json:"transaction_id,omitempty"`
+	Transactions  []ReceiptTransaction `json:"transactions,omitempty"`
+	CreatedAt     string               `json:"created_at"`
 }
 
 type AnalyzedReceiptEmail struct {

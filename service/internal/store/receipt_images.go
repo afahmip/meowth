@@ -51,9 +51,9 @@ func (s *ReceiptImageStore) List(ctx context.Context) ([]model.AnalyzedReceiptIm
 		var r model.AnalyzedReceiptImage
 		var claudeResponse string
 		rows.Scan(&r.ID, &r.Filename, &claudeResponse, &r.DriveURL, &r.TransactionID, &r.CreatedAt)
-		var txn model.ReceiptTransaction
-		if err := json.Unmarshal([]byte(claudeResponse), &txn); err == nil {
-			r.Transaction = &txn
+		var txns []model.ReceiptTransaction
+		if err := json.Unmarshal([]byte(claudeResponse), &txns); err == nil {
+			r.Transactions = txns
 		}
 		items = append(items, r)
 	}

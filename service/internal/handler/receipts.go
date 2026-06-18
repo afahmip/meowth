@@ -64,10 +64,16 @@ func (h *ReceiptHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var txn model.ReceiptTransaction
-	json.Unmarshal([]byte(claudeResponse), &txn)
+	var txns []model.ReceiptTransaction
+	json.Unmarshal([]byte(claudeResponse), &txns)
 
-	filename := generateFilename(txn.TransactionDate, txn.Merchant, ext)
+	// Use first transaction for filename generation
+	var firstDate, firstMerchant string
+	if len(txns) > 0 {
+		firstDate = txns[0].TransactionDate
+		firstMerchant = txns[0].Merchant
+	}
+	filename := generateFilename(firstDate, firstMerchant, ext)
 	receiptID, err := h.store.Create(r.Context(), filename, minifyJSON(claudeResponse))
 	if err != nil {
 		log.Printf("db insert error: %v", err)
@@ -80,8 +86,8 @@ func (h *ReceiptHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]any{
-		"id":          receiptID,
-		"transaction": txn,
+		"id":           receiptID,
+		"transactions": txns,
 	})
 }
 
@@ -127,23 +133,27 @@ func analyzeImageWithClaude(ctx context.Context, imageBytes []byte, mediaType st
 		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(
 				anthropic.NewImageBlockBase64(mediaType, encoded),
-				anthropic.NewTextBlock(`Analyze this receipt image and extract the transaction details.
+				anthropic.NewTextBlock(`Analyze this receipt image and extract all transactions visible.
 
-Return ONLY a JSON object with this exact structure (no markdown, no explanation):
-{
-  "merchant": "store name",
-  "amount": 0.00,
-  "currency": "3-letter code",
-  "transaction_date": "YYYY-MM-DD",
-  "type": "expense",
-  "notes": "optional notes",
-  "items": [
-    { "description": "item name", "amount": 0.00 }
-  ]
-}
+Return ONLY a JSON array with this exact structure (no markdown, no explanation):
+[
+  {
+    "merchant": "store name",
+    "amount": 0.00,
+    "currency": "3-letter code",
+    "transaction_date": "YYYY-MM-DD",
+    "type": "expense",
+    "notes": "optional notes",
+    "items": [
+      { "description": "item name", "amount": 0.00 }
+    ]
+  }
+]
 
 Rules:
-- amount is the total amount paid
+- Return one object per transaction found in the image
+- If the image shows a single receipt, return an array with one object
+- amount is the total amount paid per transaction
 - currency should be inferred from symbols or context (default to USD if unknown)
 - transaction_date should be the date on the receipt (default to today if not found)
 - items should list individual line items if visible; omit the items field if none are visible
