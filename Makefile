@@ -1,4 +1,4 @@
-.PHONY: run build reset
+.PHONY: run build reset mobile-local mobile-prod
 
 run:
 	-lsof -ti :8080 | xargs kill -9 2>/dev/null
@@ -9,3 +9,9 @@ build:
 
 reset:
 	rm -f service/meowth.db
+
+mobile-local:
+	cd mobile && flutter run --dart-define=ENV=local
+
+mobile-prod:
+	cd mobile && flutter run --dart-define=ENV=prod
