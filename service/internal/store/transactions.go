@@ -274,6 +274,39 @@ func (s *TransactionStore) Delete(ctx context.Context, id string) (bool, error) 
 	return n > 0, nil
 }
 
+func (s *TransactionStore) Summary(ctx context.Context, from, to string) (model.TransactionSummary, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT t.category_id, COALESCE(c.name, 'Uncategorized'), SUM(t.amount)
+		FROM transactions t
+		LEFT JOIN categories c ON c.id = t.category_id
+		WHERE t.type = 'expense' AND t.transaction_date >= ? AND t.transaction_date <= ?
+		GROUP BY t.category_id
+		ORDER BY SUM(t.amount) DESC
+	`, from, to)
+	if err != nil {
+		return model.TransactionSummary{}, err
+	}
+	defer rows.Close()
+
+	summary := model.TransactionSummary{From: from, To: to, Categories: []model.CategorySummary{}}
+	for rows.Next() {
+		var cs model.CategorySummary
+		if err := rows.Scan(&cs.CategoryID, &cs.CategoryName, &cs.Total); err != nil {
+			return model.TransactionSummary{}, err
+		}
+		summary.Categories = append(summary.Categories, cs)
+		summary.Total += cs.Total
+	}
+
+	if summary.Total > 0 {
+		for i := range summary.Categories {
+			summary.Categories[i].Percentage = summary.Categories[i].Total / summary.Total * 100
+		}
+	}
+
+	return summary, nil
+}
+
 func intStr(n int64) string {
 	return strconv.FormatInt(n, 10)
 }

@@ -44,3 +44,17 @@ type ItemInput struct {
 	Amount      float64 `json:"amount"`
 	CategoryID  *int64  `json:"category_id"`
 }
+
+type CategorySummary struct {
+	CategoryID   *int64  `json:"category_id"`
+	CategoryName string  `json:"category_name"`
+	Total        float64 `json:"total"`
+	Percentage   float64 `json:"percentage"`
+}
+
+type TransactionSummary struct {
+	From       string            `json:"from"`
+	To         string            `json:"to"`
+	Total      float64           `json:"total"`
+	Categories []CategorySummary `json:"categories"`
+}

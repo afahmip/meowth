@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../models/summary.dart';
 import '../models/transaction.dart';
 
 class TransactionApi {
@@ -7,11 +8,36 @@ class TransactionApi {
 
   const TransactionApi(this.baseUrl);
 
-  Future<List<Transaction>> list() async {
-    final res = await http.get(Uri.parse('$baseUrl/transactions'));
+  Future<List<Transaction>> list({
+    String? categoryId,
+    String? from,
+    String? to,
+    String? keyword,
+  }) async {
+    final params = <String, String>{
+      if (categoryId != null) 'category_id': categoryId,
+      if (from != null) 'from': from,
+      if (to != null) 'to': to,
+      if (keyword != null && keyword.isNotEmpty) 'q': keyword,
+    };
+    final uri = Uri.parse('$baseUrl/transactions')
+        .replace(queryParameters: params.isEmpty ? null : params);
+    final res = await http.get(uri);
     if (res.statusCode != 200) throw Exception('Failed to load transactions');
     final List data = jsonDecode(res.body);
     return data.map((e) => Transaction.fromJson(e)).toList();
+  }
+
+  Future<TransactionSummary> summary({String? from, String? to}) async {
+    final params = <String, String>{
+      if (from != null) 'from': from,
+      if (to != null) 'to': to,
+    };
+    final uri = Uri.parse('$baseUrl/transactions/summary')
+        .replace(queryParameters: params.isEmpty ? null : params);
+    final res = await http.get(uri);
+    if (res.statusCode != 200) throw Exception('Failed to load summary');
+    return TransactionSummary.fromJson(jsonDecode(res.body));
   }
 
   Future<int> create(TransactionInput input) async {

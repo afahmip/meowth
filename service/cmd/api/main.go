@@ -53,6 +53,7 @@ func main() {
 	mux.HandleFunc("PATCH /categories/{id}", catHandler.Update)
 
 	mux.HandleFunc("GET /transactions", txnHandler.List)
+	mux.HandleFunc("GET /transactions/summary", txnHandler.Summary)
 	mux.HandleFunc("POST /transactions", txnHandler.Create)
 	mux.HandleFunc("PATCH /transactions/{id}", txnHandler.Update)
 	mux.HandleFunc("DELETE /transactions/{id}", txnHandler.Delete)

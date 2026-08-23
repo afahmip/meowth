@@ -3,6 +3,7 @@ import '../api/transaction_api.dart';
 import '../config.dart';
 import '../models/transaction.dart';
 import '../widgets/transaction_card.dart';
+import 'summary_screen.dart';
 import 'transaction_detail_screen.dart';
 import 'transaction_form_screen.dart';
 
@@ -57,6 +58,15 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.donut_large_outlined, color: Color(0xFF111827)),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SummaryScreen()),
+              );
+            },
+          ),
           if (AppConfig.env == Env.local)
             Container(
               margin: const EdgeInsets.only(right: 16),

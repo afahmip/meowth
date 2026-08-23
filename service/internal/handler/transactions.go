@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/afahmip/meowth/internal/model"
 	"github.com/afahmip/meowth/internal/store"
@@ -32,6 +33,37 @@ func (h *TransactionHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(txns)
+}
+
+func (h *TransactionHandler) Summary(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	from, to := q.Get("from"), q.Get("to")
+	if from == "" || to == "" {
+		from, to = defaultSummaryRange()
+	}
+
+	summary, err := h.store.Summary(r.Context(), from, to)
+	if err != nil {
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(summary)
+}
+
+// defaultSummaryRange returns the current billing-cycle range: the 25th of a
+// month through the 24th of the next, capped at today.
+func defaultSummaryRange() (string, string) {
+	now := time.Now()
+	y, m, d := now.Date()
+	loc := now.Location()
+
+	from := time.Date(y, m, 25, 0, 0, 0, 0, loc)
+	if d < 25 {
+		from = from.AddDate(0, -1, 0)
+	}
+
+	return from.Format("2006-01-02"), now.Format("2006-01-02")
 }
 
 func (h *TransactionHandler) Create(w http.ResponseWriter, r *http.Request) {
