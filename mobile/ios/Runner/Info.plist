@@ -32,6 +32,10 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Flutter needs local network access for debugging.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Meowth needs camera access to scan receipts.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Meowth needs photo library access to upload receipt images.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

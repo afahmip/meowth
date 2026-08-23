@@ -71,12 +71,23 @@ class Transaction {
   String get displayName => merchant?.isNotEmpty == true ? merchant! : source;
 }
 
+class TransactionItemInput {
+  final String description;
+  final double amount;
+
+  const TransactionItemInput({required this.description, required this.amount});
+
+  Map<String, dynamic> toJson() => {'description': description, 'amount': amount};
+}
+
 class TransactionInput {
   final String? merchant;
   final double amount;
   final String currency;
   final String? transactionDate;
   final String type;
+  final String source;
+  final List<TransactionItemInput> items;
 
   const TransactionInput({
     this.merchant,
@@ -84,6 +95,8 @@ class TransactionInput {
     required this.currency,
     this.transactionDate,
     required this.type,
+    this.source = 'manual',
+    this.items = const [],
   });
 
   Map<String, dynamic> toJson() => {
@@ -92,6 +105,7 @@ class TransactionInput {
         'currency': currency,
         if (transactionDate != null) 'transaction_date': transactionDate,
         'type': type,
-        'source': 'manual',
+        'source': source,
+        if (items.isNotEmpty) 'items': items.map((e) => e.toJson()).toList(),
       };
 }

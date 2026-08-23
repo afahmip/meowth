@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -60,12 +61,16 @@ func (h *ReceiptHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 	claudeResponse, err := analyzeImageWithClaude(r.Context(), imageBytes, mediaType)
 	if err != nil {
 		log.Printf("claude analysis error: %v", err)
-		http.Error(w, "failed to analyze receipt", http.StatusInternalServerError)
+		http.Error(w, "failed to analyze receipt: "+claudeErrorMessage(err), http.StatusBadGateway)
 		return
 	}
 
 	var txns []model.ReceiptTransaction
-	json.Unmarshal([]byte(claudeResponse), &txns)
+	if err := json.Unmarshal([]byte(claudeResponse), &txns); err != nil {
+		log.Printf("claude response unmarshal error: %v (response: %s)", err, claudeResponse)
+		http.Error(w, "claude returned a response that could not be parsed as JSON", http.StatusBadGateway)
+		return
+	}
 
 	// Use first transaction for filename generation
 	var firstDate, firstMerchant string
@@ -121,6 +126,32 @@ func (h *ReceiptHandler) AssignTransaction(w http.ResponseWriter, r *http.Reques
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// claudeErrorMessage turns a Claude API error into a message that's safe and
+// useful to show a client, instead of a bare 500 with no indication of cause
+// (e.g. missing API key vs. rate limiting vs. an oversized/unreadable image).
+func claudeErrorMessage(err error) string {
+	var apiErr *anthropic.Error
+	if errors.As(err, &apiErr) {
+		switch apiErr.StatusCode {
+		case http.StatusUnauthorized, http.StatusForbidden:
+			return "Claude API rejected the request: invalid or missing API key"
+		case http.StatusTooManyRequests:
+			return "Claude API rate limit exceeded, please try again shortly"
+		case http.StatusRequestEntityTooLarge:
+			return "the image is too large for Claude API to process"
+		case http.StatusBadRequest:
+			return "Claude API rejected the image (" + string(apiErr.Type()) + ")"
+		case http.StatusServiceUnavailable, 529:
+			return "Claude API is temporarily overloaded, please try again shortly"
+		default:
+			return fmt.Sprintf("Claude API error (status %d, %s)", apiErr.StatusCode, apiErr.Type())
+		}
+	}
+	// Not an API error (e.g. missing credentials, network failure) — the
+	// SDK's message is already specific and safe to surface as-is.
+	return err.Error()
 }
 
 func analyzeImageWithClaude(ctx context.Context, imageBytes []byte, mediaType string) (string, error) {

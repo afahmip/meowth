@@ -3,6 +3,7 @@ import '../api/transaction_api.dart';
 import '../config.dart';
 import '../models/transaction.dart';
 import '../widgets/transaction_card.dart';
+import 'receipt_upload_screen.dart';
 import 'summary_screen.dart';
 import 'transaction_detail_screen.dart';
 import 'transaction_form_screen.dart';
@@ -87,18 +88,42 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: _buildBody(),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          final result = await Navigator.push<bool>(
-            context,
-            MaterialPageRoute(
-              builder: (_) => TransactionFormScreen(api: _api),
-            ),
-          );
-          if (result == true) _load();
-        },
-        backgroundColor: const Color(0xFF111827),
-        child: const Icon(Icons.add, color: Colors.white),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton(
+            heroTag: 'scan-receipt-fab',
+            mini: true,
+            backgroundColor: Colors.white,
+            foregroundColor: const Color(0xFF111827),
+            elevation: 2,
+            onPressed: () async {
+              final result = await Navigator.push<bool>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ReceiptUploadScreen(),
+                ),
+              );
+              if (result == true) _load();
+            },
+            child: const Icon(Icons.document_scanner_outlined),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton(
+            heroTag: 'add-transaction-fab',
+            onPressed: () async {
+              final result = await Navigator.push<bool>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => TransactionFormScreen(api: _api),
+                ),
+              );
+              if (result == true) _load();
+            },
+            backgroundColor: const Color(0xFF111827),
+            child: const Icon(Icons.add, color: Colors.white),
+          ),
+        ],
       ),
     );
   }
