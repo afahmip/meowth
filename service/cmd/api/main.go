@@ -55,6 +55,7 @@ func main() {
 	mux.HandleFunc("GET /transactions", txnHandler.List)
 	mux.HandleFunc("POST /transactions", txnHandler.Create)
 	mux.HandleFunc("PATCH /transactions/{id}", txnHandler.Update)
+	mux.HandleFunc("DELETE /transactions/{id}", txnHandler.Delete)
 	mux.HandleFunc("POST /transactions/{id}/items", txnHandler.AddItems)
 	mux.HandleFunc("PATCH /transactions/{id}/items/{item_id}", txnHandler.UpdateItem)
 

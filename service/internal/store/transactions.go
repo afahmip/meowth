@@ -265,6 +265,15 @@ func (s *TransactionStore) UpdateItem(ctx context.Context, itemID string, input 
 	return n > 0, nil
 }
 
+func (s *TransactionStore) Delete(ctx context.Context, id string) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM transactions WHERE id = ?`, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
 func intStr(n int64) string {
 	return strconv.FormatInt(n, 10)
 }
