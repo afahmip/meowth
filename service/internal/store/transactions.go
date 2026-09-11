@@ -94,6 +94,9 @@ func (s *TransactionStore) List(ctx context.Context, f ListFilter, accountStore 
 	if err := s.attachAccounts(ctx, txns, accountStore); err != nil {
 		return nil, err
 	}
+	if err := s.attachReceiptImages(ctx, txns); err != nil {
+		return nil, err
+	}
 	return txns, nil
 }
 
@@ -122,6 +125,42 @@ func (s *TransactionStore) attachItems(ctx context.Context, txns []model.Transac
 		rows.Scan(&item.ID, &txnID, &item.Description, &item.Amount, &item.Quantity, &item.CategoryID, &item.CreatedAt)
 		if idx, ok := idxMap[txnID]; ok {
 			txns[idx].Items = append(txns[idx].Items, item)
+		}
+	}
+	return nil
+}
+
+// attachReceiptImages links each transaction back to the photo it was
+// scanned from, if any (analyzed_receipt_images.transaction_id is only set
+// once a scanned receipt's drafts are saved — see ReceiptImageStore).
+func (s *TransactionStore) attachReceiptImages(ctx context.Context, txns []model.Transaction) error {
+	ids := make([]string, len(txns))
+	for i, t := range txns {
+		ids[i] = intStr(t.ID)
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT transaction_id, drive_url FROM analyzed_receipt_images
+		WHERE transaction_id IN (`+strings.Join(ids, ",")+`) AND drive_url IS NOT NULL
+	`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	urls := map[int64]string{}
+	for rows.Next() {
+		var txnID int64
+		var url string
+		if err := rows.Scan(&txnID, &url); err != nil {
+			return err
+		}
+		urls[txnID] = url
+	}
+
+	for i := range txns {
+		if url, ok := urls[txns[i].ID]; ok {
+			txns[i].ReceiptImageURL = &url
 		}
 	}
 	return nil
@@ -260,6 +299,15 @@ func (s *TransactionStore) UpdateItem(ctx context.Context, itemID string, input 
 		input.CategoryID,
 		itemID,
 	)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+func (s *TransactionStore) DeleteItem(ctx context.Context, itemID string) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM transaction_items WHERE id = ?`, itemID)
 	if err != nil {
 		return false, err
 	}

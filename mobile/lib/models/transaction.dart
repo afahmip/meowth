@@ -36,6 +36,7 @@ class Transaction {
   final String type;
   final int? accountId;
   final int? toAccountId;
+  final String? receiptImageUrl;
   final String createdAt;
   final List<TransactionItem> items;
 
@@ -50,6 +51,7 @@ class Transaction {
     required this.type,
     this.accountId,
     this.toAccountId,
+    this.receiptImageUrl,
     required this.createdAt,
     required this.items,
   });
@@ -65,6 +67,7 @@ class Transaction {
         type: j['type'] ?? 'expense',
         accountId: j['account_id'],
         toAccountId: j['to_account_id'],
+        receiptImageUrl: j['receipt_image_url'],
         createdAt: j['created_at'] ?? '',
         items: (j['items'] as List? ?? [])
             .map((e) => TransactionItem.fromJson(e))

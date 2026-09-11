@@ -23,6 +23,7 @@ type Transaction struct {
 	ToAccountID     *int64            `json:"to_account_id"`
 	ToAccount       *Account          `json:"to_account,omitempty"`
 	GmailMessageID  *string           `json:"gmail_message_id,omitempty"`
+	ReceiptImageURL *string           `json:"receipt_image_url,omitempty"`
 	CreatedAt       string            `json:"created_at"`
 	Items           []TransactionItem `json:"items"`
 }

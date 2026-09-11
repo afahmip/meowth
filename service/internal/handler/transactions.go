@@ -139,6 +139,19 @@ func (h *TransactionHandler) AddItems(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{"ids": ids})
 }
 
+func (h *TransactionHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
+	found, err := h.store.DeleteItem(r.Context(), r.PathValue("item_id"))
+	if err != nil {
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *TransactionHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	found, err := h.store.Delete(r.Context(), r.PathValue("id"))
 	if err != nil {

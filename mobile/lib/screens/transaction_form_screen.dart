@@ -2,6 +2,27 @@ import 'package:flutter/material.dart';
 import '../api/transaction_api.dart';
 import '../models/transaction.dart';
 
+// A row in the items editor. `id` is null for a row the user just added
+// that doesn't exist on the server yet, which is how submit tells "add"
+// apart from "update" for each row.
+class _FormItem {
+  final int? id;
+  final TextEditingController descCtrl;
+  final TextEditingController amountCtrl;
+  final TextEditingController qtyCtrl;
+
+  _FormItem({this.id, String description = '', double amount = 0, int quantity = 1})
+      : descCtrl = TextEditingController(text: description),
+        amountCtrl = TextEditingController(text: amount == 0 ? '' : amount.toStringAsFixed(2)),
+        qtyCtrl = TextEditingController(text: quantity.toString());
+
+  void dispose() {
+    descCtrl.dispose();
+    amountCtrl.dispose();
+    qtyCtrl.dispose();
+  }
+}
+
 class TransactionFormScreen extends StatefulWidget {
   final TransactionApi api;
   final Transaction? transaction;
@@ -19,6 +40,8 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
   late final TextEditingController _currencyCtrl;
   late String _type;
   DateTime? _date;
+  late List<_FormItem> _items;
+  final List<int> _removedItemIds = [];
   bool _loading = false;
 
   bool get _isEdit => widget.transaction != null;
@@ -35,6 +58,9 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
     if (t?.transactionDate != null) {
       _date = DateTime.tryParse(t!.transactionDate!);
     }
+    _items = (t?.items ?? [])
+        .map((i) => _FormItem(id: i.id, description: i.description, amount: i.amount, quantity: i.quantity))
+        .toList();
   }
 
   @override
@@ -42,24 +68,79 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
     _merchantCtrl.dispose();
     _amountCtrl.dispose();
     _currencyCtrl.dispose();
+    for (final item in _items) {
+      item.dispose();
+    }
     super.dispose();
+  }
+
+  void _addItem() {
+    setState(() => _items.add(_FormItem()));
+  }
+
+  void _removeItem(int index) {
+    final item = _items[index];
+    if (item.id != null) _removedItemIds.add(item.id!);
+    setState(() {
+      _items.removeAt(index);
+    });
+    item.dispose();
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     try {
-      final input = TransactionInput(
-        merchant: _merchantCtrl.text.trim(),
-        amount: double.parse(_amountCtrl.text.trim()),
-        currency: _currencyCtrl.text.trim().toUpperCase(),
-        type: _type,
-        transactionDate: _date?.toIso8601String().substring(0, 10),
-      );
+      // Rows left blank (no description typed) are dropped rather than
+      // submitted as junk items.
+      final liveItems = _items.where((i) => i.descCtrl.text.trim().isNotEmpty).toList();
+
       if (_isEdit) {
-        await widget.api.update(widget.transaction!.id, input);
+        final txnId = widget.transaction!.id;
+        await widget.api.update(
+          txnId,
+          TransactionInput(
+            merchant: _merchantCtrl.text.trim(),
+            amount: double.parse(_amountCtrl.text.trim()),
+            currency: _currencyCtrl.text.trim().toUpperCase(),
+            type: _type,
+            transactionDate: _date?.toIso8601String().substring(0, 10),
+          ),
+        );
+
+        for (final id in _removedItemIds) {
+          await widget.api.deleteItem(txnId, id);
+        }
+
+        final newItems = <TransactionItemInput>[];
+        for (final item in liveItems) {
+          final input = TransactionItemInput(
+            description: item.descCtrl.text.trim(),
+            amount: double.tryParse(item.amountCtrl.text.trim()) ?? 0,
+            quantity: int.tryParse(item.qtyCtrl.text.trim()) ?? 1,
+          );
+          if (item.id != null) {
+            await widget.api.updateItem(txnId, item.id!, input);
+          } else {
+            newItems.add(input);
+          }
+        }
+        await widget.api.addItems(txnId, newItems);
       } else {
-        await widget.api.create(input);
+        await widget.api.create(TransactionInput(
+          merchant: _merchantCtrl.text.trim(),
+          amount: double.parse(_amountCtrl.text.trim()),
+          currency: _currencyCtrl.text.trim().toUpperCase(),
+          type: _type,
+          transactionDate: _date?.toIso8601String().substring(0, 10),
+          items: liveItems
+              .map((item) => TransactionItemInput(
+                    description: item.descCtrl.text.trim(),
+                    amount: double.tryParse(item.amountCtrl.text.trim()) ?? 0,
+                    quantity: int.tryParse(item.qtyCtrl.text.trim()) ?? 1,
+                  ))
+              .toList(),
+        ));
       }
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -187,6 +268,25 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _label('Items'),
+                TextButton.icon(
+                  onPressed: _addItem,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 32),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add Item', style: TextStyle(fontSize: 13)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            for (var i = 0; i < _items.length; i++) _itemRow(i),
             const SizedBox(height: 32),
             SizedBox(
               height: 48,
@@ -212,6 +312,62 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _itemRow(int index) {
+    final item = _items[index];
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: item.descCtrl,
+              style: const TextStyle(fontSize: 14, color: Color(0xFF111827)),
+              decoration: const InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                hintText: 'Item description',
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 32,
+            child: TextField(
+              controller: item.qtyCtrl,
+              textAlign: TextAlign.center,
+              keyboardType: TextInputType.number,
+              style: const TextStyle(fontSize: 13, color: Color(0xFF374151)),
+              decoration: const InputDecoration(isDense: true, border: InputBorder.none),
+            ),
+          ),
+          const Text('×', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF))),
+          SizedBox(
+            width: 64,
+            child: TextField(
+              controller: item.amountCtrl,
+              textAlign: TextAlign.right,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              style: const TextStyle(fontSize: 13, color: Color(0xFF374151)),
+              decoration: const InputDecoration(isDense: true, border: InputBorder.none),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 16, color: Color(0xFF9CA3AF)),
+            onPressed: () => _removeItem(index),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
       ),
     );
   }

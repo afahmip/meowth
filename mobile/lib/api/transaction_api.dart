@@ -64,4 +64,29 @@ class TransactionApi {
     final res = await http.delete(Uri.parse('$baseUrl/transactions/$id'));
     if (res.statusCode != 204) throw Exception('Failed to delete transaction');
   }
+
+  Future<void> addItems(int transactionId, List<TransactionItemInput> items) async {
+    if (items.isEmpty) return;
+    final res = await http.post(
+      Uri.parse('$baseUrl/transactions/$transactionId/items'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(items.map((i) => i.toJson()).toList()),
+    );
+    if (res.statusCode != 201) throw Exception('Failed to add items');
+  }
+
+  Future<void> updateItem(int transactionId, int itemId, TransactionItemInput item) async {
+    final res = await http.patch(
+      Uri.parse('$baseUrl/transactions/$transactionId/items/$itemId'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(item.toJson()),
+    );
+    if (res.statusCode != 204) throw Exception('Failed to update item');
+  }
+
+  Future<void> deleteItem(int transactionId, int itemId) async {
+    final res =
+        await http.delete(Uri.parse('$baseUrl/transactions/$transactionId/items/$itemId'));
+    if (res.statusCode != 204) throw Exception('Failed to delete item');
+  }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../api/transaction_api.dart';
 import '../models/transaction.dart';
+import '../utils/drive_image.dart';
 import 'transaction_form_screen.dart';
 
 class TransactionDetailScreen extends StatelessWidget {
@@ -135,6 +136,10 @@ class TransactionDetailScreen extends StatelessWidget {
               ],
             ),
           ),
+          if (transaction.receiptImageUrl != null) ...[
+            const SizedBox(height: 12),
+            _buildReceiptImage(context, transaction.receiptImageUrl!),
+          ],
           const SizedBox(height: 12),
           _infoCard([
             if (transaction.transactionDate != null)
@@ -158,6 +163,33 @@ class TransactionDetailScreen extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildReceiptImage(BuildContext context, String driveUrl) {
+    final src = driveImageSrc(driveUrl);
+    if (src == null) return const SizedBox.shrink();
+    return GestureDetector(
+      onTap: () => showDialog(
+        context: context,
+        builder: (_) => Dialog(
+          backgroundColor: Colors.black,
+          insetPadding: const EdgeInsets.all(12),
+          child: InteractiveViewer(
+            child: Image.network(src, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+          ),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.network(
+          src,
+          height: 160,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+        ),
       ),
     );
   }

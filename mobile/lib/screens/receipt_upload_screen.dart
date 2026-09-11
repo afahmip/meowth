@@ -8,6 +8,7 @@ import '../config.dart';
 import '../models/category.dart';
 import '../models/receipt.dart';
 import '../models/transaction.dart';
+import '../utils/drive_image.dart';
 
 enum _Stage { picking, analyzing, reviewing }
 
@@ -382,16 +383,8 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
     );
   }
 
-  // Drive "view" links render an HTML viewer, not a raw image, so the file
-  // id is pulled out and pointed at googleusercontent instead, which serves
-  // the image directly for publicly-shared files.
-  String? _driveImageSrc(String driveUrl) {
-    final id = RegExp(r'/d/([^/]+)/').firstMatch(driveUrl)?.group(1);
-    return id == null ? null : 'https://lh3.googleusercontent.com/d/$id';
-  }
-
   Widget _buildNetworkImagePreview(String driveUrl) {
-    final src = _driveImageSrc(driveUrl);
+    final src = driveImageSrc(driveUrl);
     if (src == null) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
