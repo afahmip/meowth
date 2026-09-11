@@ -6,3 +6,11 @@ NOTES.md
 *.postman_collection.json
 *.postman_environment.json
 roadmap/
+
+# Google OAuth / GCP service-account credentials — never commit these
+client_secret_*.json
+client-desktop.json
+*.apps.googleusercontent.com.json
+service-account*.json
+# GCP service-account key filenames end in a long hex id, e.g. <project>-5eb1a197ffb7.json
+*-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*.json
