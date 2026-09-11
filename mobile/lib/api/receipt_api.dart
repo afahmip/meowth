@@ -28,4 +28,13 @@ class ReceiptApi {
     );
     if (res.statusCode != 204) throw Exception('Failed to link transaction');
   }
+
+  Future<List<ReceiptListItem>> list() async {
+    final res = await http.get(Uri.parse('$baseUrl/receipts'));
+    if (res.statusCode != 200) {
+      throw Exception(res.body.isNotEmpty ? res.body.trim() : 'Failed to load receipts');
+    }
+    final data = jsonDecode(res.body) as List;
+    return data.map((e) => ReceiptListItem.fromJson(e)).toList();
+  }
 }

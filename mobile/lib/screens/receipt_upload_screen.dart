@@ -30,7 +30,19 @@ int? _resolveCategoryId(String? categoryName, List<Category> categories) {
 }
 
 class ReceiptUploadScreen extends StatefulWidget {
-  const ReceiptUploadScreen({super.key});
+  // When resuming a previously-analyzed receipt that hasn't been saved yet
+  // (see PendingReceiptsScreen), these skip straight to the review stage
+  // instead of showing the image picker.
+  final int? pendingReceiptId;
+  final List<ReceiptTransactionDraft>? pendingDrafts;
+  final String? pendingImageUrl;
+
+  const ReceiptUploadScreen({
+    super.key,
+    this.pendingReceiptId,
+    this.pendingDrafts,
+    this.pendingImageUrl,
+  });
 
   @override
   State<ReceiptUploadScreen> createState() => _ReceiptUploadScreenState();
@@ -66,6 +78,21 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
     _txnApi = TransactionApi(AppConfig.baseUrl);
     _categoryApi = CategoryApi(AppConfig.baseUrl);
     _categoriesFuture = _categoryApi.list().catchError((_) => <Category>[]);
+    if (widget.pendingReceiptId != null) {
+      _stage = _Stage.analyzing;
+      _loadPending();
+    }
+  }
+
+  Future<void> _loadPending() async {
+    final cats = await _categoriesFuture;
+    setState(() {
+      _receiptId = widget.pendingReceiptId;
+      _categories = cats;
+      _drafts = List.of(widget.pendingDrafts ?? []);
+      _draftKeys = List.generate(_drafts.length, (_) => UniqueKey());
+      _stage = _Stage.reviewing;
+    });
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -179,9 +206,9 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          'Scan Receipt',
-          style: TextStyle(
+        title: Text(
+          widget.pendingReceiptId != null ? 'Review Receipt' : 'Scan Receipt',
+          style: const TextStyle(
             color: Color(0xFF111827),
             fontSize: 17,
             fontWeight: FontWeight.w600,
@@ -262,7 +289,10 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
   Widget _buildReview() {
     return Column(
       children: [
-        if (_pickedImage != null) _buildImagePreview(),
+        if (_pickedImage != null)
+          _buildImagePreview()
+        else if (widget.pendingImageUrl != null)
+          _buildNetworkImagePreview(widget.pendingImageUrl!),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Align(
@@ -358,6 +388,32 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
             width: double.infinity,
             fit: BoxFit.cover,
           ),
+        ),
+      ),
+    );
+  }
+
+  // Drive "view" links render an HTML viewer, not a raw image, so the file
+  // id is pulled out and pointed at googleusercontent instead, which serves
+  // the image directly for publicly-shared files.
+  String? _driveImageSrc(String driveUrl) {
+    final id = RegExp(r'/d/([^/]+)/').firstMatch(driveUrl)?.group(1);
+    return id == null ? null : 'https://lh3.googleusercontent.com/d/$id';
+  }
+
+  Widget _buildNetworkImagePreview(String driveUrl) {
+    final src = _driveImageSrc(driveUrl);
+    if (src == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.network(
+          src,
+          height: 160,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
         ),
       ),
     );

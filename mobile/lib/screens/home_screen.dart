@@ -3,6 +3,7 @@ import '../api/transaction_api.dart';
 import '../config.dart';
 import '../models/transaction.dart';
 import '../widgets/transaction_card.dart';
+import 'pending_receipts_screen.dart';
 import 'receipt_upload_screen.dart';
 import 'summary_screen.dart';
 import 'transaction_detail_screen.dart';
@@ -59,6 +60,17 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.pending_actions_outlined, color: Color(0xFF111827)),
+            tooltip: 'Pending Receipts',
+            onPressed: () async {
+              final result = await Navigator.push<bool>(
+                context,
+                MaterialPageRoute(builder: (_) => const PendingReceiptsScreen()),
+              );
+              if (result == true) _load();
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.donut_large_outlined, color: Color(0xFF111827)),
             onPressed: () {

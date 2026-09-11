@@ -72,3 +72,37 @@ class ReceiptAnalysis {
             .toList(),
       );
 }
+
+// A previously-analyzed receipt as returned by GET /receipts. transactionId
+// is null until the drafts are reviewed and saved, which is what makes a
+// receipt show up as "pending" / not-yet-saved.
+class ReceiptListItem {
+  final int id;
+  final String filename;
+  final String? driveUrl;
+  final int? transactionId;
+  final List<ReceiptTransactionDraft> transactions;
+  final String createdAt;
+
+  const ReceiptListItem({
+    required this.id,
+    required this.filename,
+    this.driveUrl,
+    this.transactionId,
+    this.transactions = const [],
+    required this.createdAt,
+  });
+
+  bool get isSaved => transactionId != null;
+
+  factory ReceiptListItem.fromJson(Map<String, dynamic> j) => ReceiptListItem(
+        id: j['id'],
+        filename: j['filename'] ?? '',
+        driveUrl: j['drive_url'],
+        transactionId: j['transaction_id'],
+        transactions: (j['transactions'] as List? ?? [])
+            .map((e) => ReceiptTransactionDraft.fromJson(e))
+            .toList(),
+        createdAt: j['created_at'] ?? '',
+      );
+}
