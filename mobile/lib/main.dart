@@ -1,7 +1,15 @@
 import 'package:flutter/material.dart';
+import 'config.dart';
 import 'screens/home_screen.dart';
+import 'services/receipt_upload_manager.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Registered before runApp so no status/progress update from
+  // background_downloader is missed — including one delivered because the
+  // OS just relaunched the app to report an upload that finished while it
+  // was terminated.
+  await ReceiptUploadManager.instance.init(AppConfig.baseUrl);
   runApp(const MeowtApp());
 }
 

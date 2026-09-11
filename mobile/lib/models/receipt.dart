@@ -55,17 +55,32 @@ class ReceiptTransactionDraft {
       );
 }
 
-class ReceiptAnalysis {
+// One entry from GET /receipts/jobs?batch_id=... — the async upload+analyze
+// job behind a single uploaded image (see ReceiptUploadManager). Once
+// status is "done", the resulting receipt already shows up via the regular
+// GET /receipts list, so this type only carries what's needed to track
+// in-flight progress and surface a failure.
+class ReceiptJobStatus {
   final int id;
-  final List<ReceiptTransactionDraft> transactions;
+  final String status; // queued | processing | done | failed
+  final String? error;
+  final int? analyzedReceiptImageId;
 
-  const ReceiptAnalysis({required this.id, required this.transactions});
+  const ReceiptJobStatus({
+    required this.id,
+    required this.status,
+    this.error,
+    this.analyzedReceiptImageId,
+  });
 
-  factory ReceiptAnalysis.fromJson(Map<String, dynamic> j) => ReceiptAnalysis(
+  bool get isDone => status == 'done';
+  bool get isFailed => status == 'failed';
+
+  factory ReceiptJobStatus.fromJson(Map<String, dynamic> j) => ReceiptJobStatus(
         id: j['id'],
-        transactions: (j['transactions'] as List? ?? [])
-            .map((e) => ReceiptTransactionDraft.fromJson(e))
-            .toList(),
+        status: j['status'] ?? 'queued',
+        error: j['error'],
+        analyzedReceiptImageId: j['analyzed_receipt_image_id'],
       );
 }
 

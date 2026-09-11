@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:uuid/uuid.dart';
 import '../api/category_api.dart';
 import '../api/receipt_api.dart';
 import '../api/transaction_api.dart';
@@ -8,7 +9,9 @@ import '../config.dart';
 import '../models/category.dart';
 import '../models/receipt.dart';
 import '../models/transaction.dart';
+import '../services/receipt_upload_manager.dart';
 import '../utils/drive_image.dart';
+import 'pending_receipts_screen.dart';
 
 enum _Stage { picking, analyzing, reviewing }
 
@@ -52,7 +55,12 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
   _Stage _stage = _Stage.picking;
   String? _error;
   int? _receiptId;
-  File? _pickedImage;
+  // Images picked in this session but not yet handed to
+  // ReceiptUploadManager — shown as a preview grid until the user confirms
+  // with "Upload".
+  final List<File> _queuedFiles = [];
+  String? _batchId;
+  bool _submitting = false;
   List<ReceiptTransactionDraft> _drafts = [];
   // Stable per-draft identity, kept in lockstep with _drafts. Using the list
   // index as a Key would make a card removal shift every later card's index,
@@ -85,36 +93,50 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
     });
   }
 
-  Future<void> _pickImage(ImageSource source) async {
-    final picked = await _picker.pickImage(source: source, imageQuality: 85);
+  Future<void> _takePhoto() async {
+    final picked = await _picker.pickImage(source: ImageSource.camera, imageQuality: 85);
     if (picked == null) return;
-    final file = File(picked.path);
-
     setState(() {
-      _stage = _Stage.analyzing;
       _error = null;
-      _pickedImage = file;
+      _queuedFiles.add(File(picked.path));
     });
+  }
+
+  Future<void> _pickFromGallery() async {
+    final picked = await _picker.pickMultiImage(imageQuality: 85);
+    if (picked.isEmpty) return;
+    setState(() {
+      _error = null;
+      _queuedFiles.addAll(picked.map((x) => File(x.path)));
+    });
+  }
+
+  void _removeQueued(int index) => setState(() => _queuedFiles.removeAt(index));
+
+  // Hands every queued image to ReceiptUploadManager (one background upload
+  // task per image, sharing one batch id) and leaves — analysis happens
+  // server-side once each image lands, and progress from here on is tracked
+  // by PendingReceiptsScreen, not this screen, so the upload can keep going
+  // even if the user backgrounds or kills the app right after this returns.
+  Future<void> _startUpload() async {
+    if (_queuedFiles.isEmpty) return;
+    setState(() => _submitting = true);
+    _batchId ??= const Uuid().v4();
     try {
-      final result = await _receiptApi.analyze(file);
-      final cats = await _categoriesFuture;
-      setState(() {
-        _receiptId = result.id;
-        _categories = cats;
-        _drafts = result.transactions;
-        _draftKeys = List.generate(_drafts.length, (_) => UniqueKey());
-        if (result.transactions.isEmpty) {
-          _stage = _Stage.picking;
-          _error = 'No transactions were found in that image.';
-        } else {
-          _stage = _Stage.reviewing;
-        }
-      });
+      for (final file in _queuedFiles) {
+        await ReceiptUploadManager.instance.enqueueFile(file, batchId: _batchId!);
+      }
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const PendingReceiptsScreen()),
+      );
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _stage = _Stage.picking;
-      });
+      if (mounted) {
+        setState(() => _error = e.toString());
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
@@ -215,6 +237,94 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
   }
 
   Widget _buildPicker() {
+    return Column(
+      children: [
+        Expanded(
+          child: _queuedFiles.isEmpty
+              ? _buildEmptyPickerHint()
+              : _buildQueuedGrid(),
+        ),
+        SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              children: [
+                if (_error != null) ...[
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 13, color: Color(0xFFDC2626)),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _submitting ? null : _takePhoto,
+                        icon: const Icon(Icons.camera_alt_outlined),
+                        label: const Text('Take Photo'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF111827),
+                          side: const BorderSide(color: Color(0xFFE5E7EB)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _submitting ? null : _pickFromGallery,
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: const Text('Gallery'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF111827),
+                          side: const BorderSide(color: Color(0xFFE5E7EB)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_queuedFiles.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: _submitting ? null : _startUpload,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF111827),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                        elevation: 0,
+                      ),
+                      child: _submitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
+                            )
+                          : Text('Upload ${_queuedFiles.length}'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyPickerHint() {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -225,50 +335,10 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
                 size: 56, color: Color(0xFF9CA3AF)),
             const SizedBox(height: 16),
             const Text(
-              'Upload a receipt to auto-fill transactions',
+              'Scan one or more receipts — they upload and get analyzed in '
+              'the background, even if you close the app',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 15, color: Color(0xFF374151)),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13, color: Color(0xFFDC2626)),
-              ),
-            ],
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: () => _pickImage(ImageSource.camera),
-                icon: const Icon(Icons.camera_alt_outlined),
-                label: const Text('Take Photo'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF111827),
-                  foregroundColor: Colors.white,
-                  shape:
-                      RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  elevation: 0,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: OutlinedButton.icon(
-                onPressed: () => _pickImage(ImageSource.gallery),
-                icon: const Icon(Icons.photo_library_outlined),
-                label: const Text('Choose from Gallery'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF111827),
-                  side: const BorderSide(color: Color(0xFFE5E7EB)),
-                  shape:
-                      RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
             ),
           ],
         ),
@@ -276,12 +346,46 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
     );
   }
 
+  Widget _buildQueuedGrid() {
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+      ),
+      itemCount: _queuedFiles.length,
+      itemBuilder: (_, i) => Stack(
+        fit: StackFit.expand,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.file(_queuedFiles[i], fit: BoxFit.cover),
+          ),
+          Positioned(
+            top: 4,
+            right: 4,
+            child: GestureDetector(
+              onTap: _submitting ? null : () => _removeQueued(i),
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close, size: 14, color: Colors.white),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildReview() {
     return Column(
       children: [
-        if (_pickedImage != null)
-          _buildImagePreview()
-        else if (widget.pendingImageUrl != null)
+        if (widget.pendingImageUrl != null)
           _buildNetworkImagePreview(widget.pendingImageUrl!),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -354,32 +458,6 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildImagePreview() {
-    final image = _pickedImage!;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: GestureDetector(
-        onTap: () => showDialog(
-          context: context,
-          builder: (_) => Dialog(
-            backgroundColor: Colors.black,
-            insetPadding: const EdgeInsets.all(12),
-            child: InteractiveViewer(child: Image.file(image)),
-          ),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.file(
-            image,
-            height: 160,
-            width: double.infinity,
-            fit: BoxFit.cover,
-          ),
-        ),
-      ),
     );
   }
 

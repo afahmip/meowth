@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../models/receipt.dart';
 
@@ -8,16 +7,27 @@ class ReceiptApi {
 
   const ReceiptApi(this.baseUrl);
 
-  Future<ReceiptAnalysis> analyze(File image) async {
-    final request =
-        http.MultipartRequest('POST', Uri.parse('$baseUrl/receipts/analyze'))
-          ..files.add(await http.MultipartFile.fromPath('image', image.path));
-    final streamed = await request.send().timeout(const Duration(minutes: 5));
-    final res = await http.Response.fromStream(streamed);
-    if (res.statusCode != 201) {
-      throw Exception(res.body.isNotEmpty ? res.body.trim() : 'Failed to analyze receipt');
+  // Polls the async job(s) behind a batch of images uploaded together via
+  // ReceiptUploadManager — the actual upload happens out-of-band through
+  // background_downloader, not through this client.
+  Future<List<ReceiptJobStatus>> listJobs(String batchId) async {
+    final uri = Uri.parse('$baseUrl/receipts/jobs')
+        .replace(queryParameters: {'batch_id': batchId});
+    final res = await http.get(uri);
+    if (res.statusCode != 200) {
+      throw Exception(res.body.isNotEmpty ? res.body.trim() : 'Failed to load upload status');
     }
-    return ReceiptAnalysis.fromJson(jsonDecode(res.body));
+    final data = jsonDecode(res.body) as List;
+    return data.map((e) => ReceiptJobStatus.fromJson(e)).toList();
+  }
+
+  // Resets a job that uploaded successfully but failed analysis back to
+  // queued — the server already has the image bytes, so no re-upload here.
+  Future<void> retryJob(int jobId) async {
+    final res = await http.post(Uri.parse('$baseUrl/receipts/jobs/$jobId/retry'));
+    if (res.statusCode != 204) {
+      throw Exception(res.body.isNotEmpty ? res.body.trim() : 'Failed to retry upload');
+    }
   }
 
   Future<void> assignTransaction(int receiptId, int transactionId) async {
