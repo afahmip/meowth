@@ -28,10 +28,17 @@ import (
 type ReceiptHandler struct {
 	store         *store.ReceiptImageStore
 	categoryStore *store.CategoryStore
+	jobStore      *store.ReceiptJobStore
+	jobQueue      chan int64
 }
 
-func NewReceiptHandler(s *store.ReceiptImageStore, cs *store.CategoryStore) *ReceiptHandler {
-	return &ReceiptHandler{store: s, categoryStore: cs}
+func NewReceiptHandler(s *store.ReceiptImageStore, cs *store.CategoryStore, js *store.ReceiptJobStore) *ReceiptHandler {
+	return &ReceiptHandler{
+		store:         s,
+		categoryStore: cs,
+		jobStore:      js,
+		jobQueue:      make(chan int64, 100),
+	}
 }
 
 func (h *ReceiptHandler) Analyze(w http.ResponseWriter, r *http.Request) {

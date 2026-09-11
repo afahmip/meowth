@@ -35,3 +35,23 @@ type ReceiptItem struct {
 	Quantity    int     `json:"quantity"`
 	CategoryID  *int64  `json:"category_id,omitempty"`
 }
+
+// ReceiptJob tracks one queued/in-flight/finished receipt image on the async
+// upload+analyze pipeline (see internal/handler/receipt_jobs.go). ImageData
+// holds the raw bytes only until the job reaches a terminal success — it's
+// kept around on failure so a manual retry can resubmit without asking the
+// client to re-upload.
+type ReceiptJob struct {
+	ID                     int64
+	BatchID                string
+	Filename               string
+	MediaType              string
+	ImageData              []byte
+	Status                 string
+	Attempts               int
+	LastError              *string
+	AnalyzedReceiptImageID *int64
+	Transactions           []ReceiptTransaction
+	CreatedAt              string
+	UpdatedAt              string
+}

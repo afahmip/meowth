@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"net/http"
@@ -36,8 +37,10 @@ func main() {
 	txnHandler := handler.NewTransactionHandler(store.NewTransactionStore(db), accountStore)
 	catHandler := handler.NewCategoryHandler(categoryStore)
 	accHandler := handler.NewAccountHandler(accountStore)
-	receiptHandler := handler.NewReceiptHandler(store.NewReceiptImageStore(db), categoryStore)
+	receiptHandler := handler.NewReceiptHandler(store.NewReceiptImageStore(db), categoryStore, store.NewReceiptJobStore(db))
 	receiptEmailHandler := handler.NewReceiptEmailHandler(store.NewReceiptEmailStore(db))
+
+	receiptHandler.StartWorkers(context.Background())
 
 	mux := http.NewServeMux()
 
@@ -70,6 +73,9 @@ func main() {
 		"request timed out",
 	).ServeHTTP)
 	mux.HandleFunc("PATCH /receipts/{id}/transaction", receiptHandler.AssignTransaction)
+	mux.HandleFunc("POST /receipts/jobs", receiptHandler.CreateJob)
+	mux.HandleFunc("GET /receipts/jobs", receiptHandler.ListJobs)
+	mux.HandleFunc("POST /receipts/jobs/{id}/retry", receiptHandler.RetryJob)
 	mux.HandleFunc("POST /receipts/analyze/email", http.TimeoutHandler(
 		http.HandlerFunc(receiptEmailHandler.AnalyzeEmail),
 		5*time.Minute,
