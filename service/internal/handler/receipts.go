@@ -65,12 +65,12 @@ func (h *ReceiptHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
-	categoryNames := make([]string, len(categories))
-	for i, c := range categories {
-		categoryNames[i] = c.Name
+	validCategoryIDs := make(map[int64]bool, len(categories))
+	for _, c := range categories {
+		validCategoryIDs[c.ID] = true
 	}
 
-	claudeResponse, err := analyzeImageWithClaude(r.Context(), imageBytes, mediaType, categoryNames)
+	claudeResponse, err := analyzeImageWithClaude(r.Context(), imageBytes, mediaType, categories)
 	if err != nil {
 		log.Printf("claude analysis error: %v", err)
 		http.Error(w, "failed to analyze receipt: "+claudeErrorMessage(err), http.StatusBadGateway)
@@ -84,9 +84,18 @@ func (h *ReceiptHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for i := range txns {
+		// Claude is only given the current category list, but its response
+		// could still name a stale or hallucinated id — drop anything that
+		// doesn't match a real category rather than trusting it blindly.
+		if txns[i].CategoryID != nil && !validCategoryIDs[*txns[i].CategoryID] {
+			txns[i].CategoryID = nil
+		}
 		for j := range txns[i].Items {
 			if txns[i].Items[j].Quantity <= 0 {
 				txns[i].Items[j].Quantity = 1
+			}
+			if txns[i].Items[j].CategoryID != nil && !validCategoryIDs[*txns[i].Items[j].CategoryID] {
+				txns[i].Items[j].CategoryID = nil
 			}
 		}
 	}
@@ -173,15 +182,19 @@ func claudeErrorMessage(err error) string {
 	return err.Error()
 }
 
-func analyzeImageWithClaude(ctx context.Context, imageBytes []byte, mediaType string, categoryNames []string) (string, error) {
+func analyzeImageWithClaude(ctx context.Context, imageBytes []byte, mediaType string, categories []model.Category) (string, error) {
 	client := anthropic.NewClient()
 	encoded := base64.StdEncoding.EncodeToString(imageBytes)
 
-	categoryInstruction := "Leave the \"category\" field empty — no categories are available."
-	if len(categoryNames) > 0 {
+	categoryInstruction := "Leave \"category_id\" null — no categories are available."
+	if len(categories) > 0 {
+		pairs := make([]string, len(categories))
+		for i, c := range categories {
+			pairs[i] = fmt.Sprintf("%d=%s", c.ID, c.Name)
+		}
 		categoryInstruction = fmt.Sprintf(
-			"Assign the best-matching category to \"category\" for both the transaction and each item, choosing only from this list: %s. If nothing fits well, leave \"category\" empty rather than inventing a new one.",
-			strings.Join(categoryNames, ", "),
+			"Assign the best-matching category id to \"category_id\" for both the transaction and each item, choosing only from this list (id=name): %s. If nothing fits well, set \"category_id\" to null rather than guessing.",
+			strings.Join(pairs, ", "),
 		)
 	}
 
@@ -196,9 +209,9 @@ Return ONLY a JSON array with this exact structure (no markdown, no explanation)
     "transaction_date": "YYYY-MM-DD",
     "type": "expense",
     "notes": "optional notes",
-    "category": "category name",
+    "category_id": 0,
     "items": [
-      { "description": "item name", "amount": 0.00, "quantity": 1, "category": "category name" }
+      { "description": "item name", "amount": 0.00, "quantity": 1, "category_id": 0 }
     ]
   }
 ]
@@ -212,6 +225,7 @@ Rules:
 - items should list individual line items if visible; omit the items field if none are visible
 - item quantity is the number of units of that item purchased, if shown on the receipt (e.g. "2x", "3 @ $1.00"); default it to 1 if no quantity is indicated
 - type is always "expense" for receipts
+- category_id must be one of the given ids (as a JSON number), or null — never invent an id or return a category name
 - %s`, categoryInstruction)
 
 	msg, err := client.Messages.New(ctx, anthropic.MessageNewParams{

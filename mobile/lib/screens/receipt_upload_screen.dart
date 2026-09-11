@@ -18,17 +18,6 @@ String _normalizeCurrency(String currency) {
   return _currencies.contains(upper) ? upper : 'AED';
 }
 
-// Claude suggests a category by name (constrained to the list we gave it),
-// so resolve that back to an actual category id here. Falls back to
-// "Uncategorized" (null) if there's no match, e.g. Claude left it blank.
-int? _resolveCategoryId(String? categoryName, List<Category> categories) {
-  if (categoryName == null || categoryName.isEmpty) return null;
-  for (final c in categories) {
-    if (c.name.toLowerCase() == categoryName.toLowerCase()) return c.id;
-  }
-  return null;
-}
-
 class ReceiptUploadScreen extends StatefulWidget {
   // When resuming a previously-analyzed receipt that hasn't been saved yet
   // (see PendingReceiptsScreen), these skip straight to the review stage
@@ -459,12 +448,12 @@ class _DraftTransactionCardState extends State<_DraftTransactionCard> {
     _amountCtrl = TextEditingController(text: d.amount.toStringAsFixed(2));
     _currency = _normalizeCurrency(d.currency);
     _type = d.type;
-    _categoryId = d.categoryId ?? _resolveCategoryId(d.category, widget.categories);
+    _categoryId = d.categoryId;
     _date =
         d.transactionDate != null ? DateTime.tryParse(d.transactionDate!) : null;
     _items = List.of(d.items);
     _itemKeys = List.generate(_items.length, (_) => UniqueKey());
-    if (_currency != d.currency || _categoryId != d.categoryId) _emit();
+    if (_currency != d.currency) _emit();
   }
 
   @override
@@ -482,7 +471,6 @@ class _DraftTransactionCardState extends State<_DraftTransactionCard> {
       transactionDate: _date?.toIso8601String().substring(0, 10),
       type: _type,
       notes: widget.draft.notes,
-      category: widget.draft.category,
       categoryId: _categoryId,
       items: _items,
     ));
@@ -728,9 +716,7 @@ class _ItemRowState extends State<_ItemRow> {
     _descCtrl = TextEditingController(text: widget.item.description);
     _amountCtrl = TextEditingController(text: widget.item.amount.toStringAsFixed(2));
     _quantityCtrl = TextEditingController(text: widget.item.quantity.toString());
-    _categoryId =
-        widget.item.categoryId ?? _resolveCategoryId(widget.item.category, widget.categories);
-    if (_categoryId != widget.item.categoryId) _emit();
+    _categoryId = widget.item.categoryId;
   }
 
   @override
@@ -746,7 +732,6 @@ class _ItemRowState extends State<_ItemRow> {
       description: _descCtrl.text.trim(),
       amount: double.tryParse(_amountCtrl.text.trim()) ?? widget.item.amount,
       quantity: int.tryParse(_quantityCtrl.text.trim()) ?? widget.item.quantity,
-      category: widget.item.category,
       categoryId: _categoryId,
     ));
   }
