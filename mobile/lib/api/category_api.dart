@@ -13,4 +13,16 @@ class CategoryApi {
     final List data = jsonDecode(res.body);
     return data.map((e) => Category.fromJson(e)).toList();
   }
+
+  Future<int> create(String name) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/categories'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'name': name}),
+    );
+    if (res.statusCode != 201) {
+      throw Exception(res.body.isNotEmpty ? res.body.trim() : 'Failed to create category');
+    }
+    return jsonDecode(res.body)['id'];
+  }
 }
