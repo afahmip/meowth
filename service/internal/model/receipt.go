@@ -25,10 +25,13 @@ type ReceiptTransaction struct {
 	TransactionDate string        `json:"transaction_date"`
 	Type            string        `json:"type"`
 	Notes           string        `json:"notes,omitempty"`
+	Category        string        `json:"category,omitempty"`
 	Items           []ReceiptItem `json:"items,omitempty"`
 }
 
 type ReceiptItem struct {
 	Description string  `json:"description"`
 	Amount      float64 `json:"amount"`
+	Quantity    int     `json:"quantity"`
+	Category    string  `json:"category,omitempty"`
 }

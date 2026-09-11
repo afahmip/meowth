@@ -1,9 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import '../api/category_api.dart';
 import '../api/receipt_api.dart';
 import '../api/transaction_api.dart';
 import '../config.dart';
+import '../models/category.dart';
 import '../models/receipt.dart';
 import '../models/transaction.dart';
 
@@ -16,6 +18,17 @@ String _normalizeCurrency(String currency) {
   return _currencies.contains(upper) ? upper : 'AED';
 }
 
+// Claude suggests a category by name (constrained to the list we gave it),
+// so resolve that back to an actual category id here. Falls back to
+// "Uncategorized" (null) if there's no match, e.g. Claude left it blank.
+int? _resolveCategoryId(String? categoryName, List<Category> categories) {
+  if (categoryName == null || categoryName.isEmpty) return null;
+  for (final c in categories) {
+    if (c.name.toLowerCase() == categoryName.toLowerCase()) return c.id;
+  }
+  return null;
+}
+
 class ReceiptUploadScreen extends StatefulWidget {
   const ReceiptUploadScreen({super.key});
 
@@ -26,6 +39,12 @@ class ReceiptUploadScreen extends StatefulWidget {
 class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
   late final ReceiptApi _receiptApi;
   late final TransactionApi _txnApi;
+  late final CategoryApi _categoryApi;
+  // Kicked off at screen init so it's typically already resolved by the time
+  // analysis finishes; awaited (with failures swallowed) right before
+  // building the review UI so every draft card's category resolution has
+  // the real list instead of racing an empty one.
+  late final Future<List<Category>> _categoriesFuture;
   final _picker = ImagePicker();
 
   _Stage _stage = _Stage.picking;
@@ -37,6 +56,7 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
   // index as a Key would make a card removal shift every later card's index,
   // causing Flutter to reuse the wrong card's editing state after the shift.
   List<Key> _draftKeys = [];
+  List<Category> _categories = [];
   bool _saving = false;
 
   @override
@@ -44,6 +64,8 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
     super.initState();
     _receiptApi = ReceiptApi(AppConfig.baseUrl);
     _txnApi = TransactionApi(AppConfig.baseUrl);
+    _categoryApi = CategoryApi(AppConfig.baseUrl);
+    _categoriesFuture = _categoryApi.list().catchError((_) => <Category>[]);
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -58,8 +80,10 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
     });
     try {
       final result = await _receiptApi.analyze(file);
+      final cats = await _categoriesFuture;
       setState(() {
         _receiptId = result.id;
+        _categories = cats;
         _drafts = result.transactions;
         _draftKeys = List.generate(_drafts.length, (_) => UniqueKey());
         if (result.transactions.isEmpty) {
@@ -113,10 +137,13 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
           transactionDate: d.transactionDate,
           type: d.type,
           source: 'receipt',
+          categoryId: d.categoryId,
           items: d.items
               .map((i) => TransactionItemInput(
                     description: i.description,
                     amount: i.amount,
+                    quantity: i.quantity,
+                    categoryId: i.categoryId,
                   ))
               .toList(),
         ));
@@ -254,6 +281,7 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
             itemBuilder: (_, i) => _DraftTransactionCard(
               key: _draftKeys[i],
               draft: _drafts[i],
+              categories: _categories,
               onChanged: (updated) => _drafts[i] = updated,
               onRemove: () => _removeDraft(i),
             ),
@@ -338,12 +366,14 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
 
 class _DraftTransactionCard extends StatefulWidget {
   final ReceiptTransactionDraft draft;
+  final List<Category> categories;
   final ValueChanged<ReceiptTransactionDraft> onChanged;
   final VoidCallback onRemove;
 
   const _DraftTransactionCard({
     super.key,
     required this.draft,
+    required this.categories,
     required this.onChanged,
     required this.onRemove,
   });
@@ -357,6 +387,7 @@ class _DraftTransactionCardState extends State<_DraftTransactionCard> {
   late final TextEditingController _amountCtrl;
   late String _currency;
   late String _type;
+  late int? _categoryId;
   DateTime? _date;
   late List<ReceiptItemDraft> _items;
   // Stable per-item identity, kept in lockstep with _items — same reasoning
@@ -372,11 +403,12 @@ class _DraftTransactionCardState extends State<_DraftTransactionCard> {
     _amountCtrl = TextEditingController(text: d.amount.toStringAsFixed(2));
     _currency = _normalizeCurrency(d.currency);
     _type = d.type;
+    _categoryId = d.categoryId ?? _resolveCategoryId(d.category, widget.categories);
     _date =
         d.transactionDate != null ? DateTime.tryParse(d.transactionDate!) : null;
     _items = List.of(d.items);
     _itemKeys = List.generate(_items.length, (_) => UniqueKey());
-    if (_currency != d.currency) _emit();
+    if (_currency != d.currency || _categoryId != d.categoryId) _emit();
   }
 
   @override
@@ -394,6 +426,8 @@ class _DraftTransactionCardState extends State<_DraftTransactionCard> {
       transactionDate: _date?.toIso8601String().substring(0, 10),
       type: _type,
       notes: widget.draft.notes,
+      category: widget.draft.category,
+      categoryId: _categoryId,
       items: _items,
     ));
   }
@@ -543,6 +577,21 @@ class _DraftTransactionCardState extends State<_DraftTransactionCard> {
                 ),
             ],
           ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<int?>(
+            value: _categoryId,
+            isExpanded: true,
+            items: [
+              const DropdownMenuItem(value: null, child: Text('Uncategorized')),
+              for (final c in widget.categories)
+                DropdownMenuItem(value: c.id, child: Text(c.name)),
+            ],
+            onChanged: (v) {
+              setState(() => _categoryId = v);
+              _emit();
+            },
+            decoration: _fieldDecoration('Category'),
+          ),
           const SizedBox(height: 10),
           const Divider(height: 1),
           const SizedBox(height: 4),
@@ -550,6 +599,7 @@ class _DraftTransactionCardState extends State<_DraftTransactionCard> {
             _ItemRow(
               key: _itemKeys[i],
               item: _items[i],
+              categories: widget.categories,
               onChanged: (updated) => _items[i] = updated,
               onRemove: () => _removeItem(i),
             ),
@@ -594,12 +644,14 @@ class _DraftTransactionCardState extends State<_DraftTransactionCard> {
 
 class _ItemRow extends StatefulWidget {
   final ReceiptItemDraft item;
+  final List<Category> categories;
   final ValueChanged<ReceiptItemDraft> onChanged;
   final VoidCallback onRemove;
 
   const _ItemRow({
     super.key,
     required this.item,
+    required this.categories,
     required this.onChanged,
     required this.onRemove,
   });
@@ -611,18 +663,25 @@ class _ItemRow extends StatefulWidget {
 class _ItemRowState extends State<_ItemRow> {
   late final TextEditingController _descCtrl;
   late final TextEditingController _amountCtrl;
+  late final TextEditingController _quantityCtrl;
+  late int? _categoryId;
 
   @override
   void initState() {
     super.initState();
     _descCtrl = TextEditingController(text: widget.item.description);
     _amountCtrl = TextEditingController(text: widget.item.amount.toStringAsFixed(2));
+    _quantityCtrl = TextEditingController(text: widget.item.quantity.toString());
+    _categoryId =
+        widget.item.categoryId ?? _resolveCategoryId(widget.item.category, widget.categories);
+    if (_categoryId != widget.item.categoryId) _emit();
   }
 
   @override
   void dispose() {
     _descCtrl.dispose();
     _amountCtrl.dispose();
+    _quantityCtrl.dispose();
     super.dispose();
   }
 
@@ -630,6 +689,9 @@ class _ItemRowState extends State<_ItemRow> {
     widget.onChanged(ReceiptItemDraft(
       description: _descCtrl.text.trim(),
       amount: double.tryParse(_amountCtrl.text.trim()) ?? widget.item.amount,
+      quantity: int.tryParse(_quantityCtrl.text.trim()) ?? widget.item.quantity,
+      category: widget.item.category,
+      categoryId: _categoryId,
     ));
   }
 
@@ -638,20 +700,59 @@ class _ItemRowState extends State<_ItemRow> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: _descCtrl,
+                  onChanged: (_) => _emit(),
+                  style: const TextStyle(fontSize: 13, color: Color(0xFF374151)),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    border: InputBorder.none,
+                    hintText: 'Item description',
+                    contentPadding: EdgeInsets.symmetric(vertical: 4),
+                  ),
+                ),
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<int?>(
+                    value: _categoryId,
+                    isDense: true,
+                    icon: const Icon(Icons.expand_more, size: 14, color: Color(0xFF9CA3AF)),
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('Uncategorized')),
+                      for (final c in widget.categories)
+                        DropdownMenuItem(value: c.id, child: Text(c.name)),
+                    ],
+                    onChanged: (v) {
+                      setState(() => _categoryId = v);
+                      _emit();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(
+            width: 28,
             child: TextField(
-              controller: _descCtrl,
+              controller: _quantityCtrl,
               onChanged: (_) => _emit(),
+              textAlign: TextAlign.center,
+              keyboardType: TextInputType.number,
               style: const TextStyle(fontSize: 13, color: Color(0xFF374151)),
               decoration: const InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
-                hintText: 'Item description',
                 contentPadding: EdgeInsets.symmetric(vertical: 4),
               ),
             ),
           ),
+          const Text('×', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF))),
           SizedBox(
             width: 64,
             child: TextField(

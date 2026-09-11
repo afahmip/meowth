@@ -28,10 +28,11 @@ class TransactionApi {
     return data.map((e) => Transaction.fromJson(e)).toList();
   }
 
-  Future<TransactionSummary> summary({String? from, String? to}) async {
+  Future<TransactionSummary> summary({String? from, String? to, String? mode}) async {
     final params = <String, String>{
       if (from != null) 'from': from,
       if (to != null) 'to': to,
+      if (mode != null) 'mode': mode,
     };
     final uri = Uri.parse('$baseUrl/transactions/summary')
         .replace(queryParameters: params.isEmpty ? null : params);

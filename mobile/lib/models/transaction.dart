@@ -2,6 +2,7 @@ class TransactionItem {
   final int id;
   final String description;
   final double amount;
+  final int quantity;
   final int? categoryId;
   final String createdAt;
 
@@ -9,6 +10,7 @@ class TransactionItem {
     required this.id,
     required this.description,
     required this.amount,
+    this.quantity = 1,
     this.categoryId,
     required this.createdAt,
   });
@@ -17,6 +19,7 @@ class TransactionItem {
         id: j['id'],
         description: j['description'] ?? '',
         amount: (j['amount'] as num).toDouble(),
+        quantity: (j['quantity'] as num?)?.toInt() ?? 1,
         categoryId: j['category_id'],
         createdAt: j['created_at'] ?? '',
       );
@@ -74,10 +77,22 @@ class Transaction {
 class TransactionItemInput {
   final String description;
   final double amount;
+  final int quantity;
+  final int? categoryId;
 
-  const TransactionItemInput({required this.description, required this.amount});
+  const TransactionItemInput({
+    required this.description,
+    required this.amount,
+    this.quantity = 1,
+    this.categoryId,
+  });
 
-  Map<String, dynamic> toJson() => {'description': description, 'amount': amount};
+  Map<String, dynamic> toJson() => {
+        'description': description,
+        'amount': amount,
+        'quantity': quantity,
+        if (categoryId != null) 'category_id': categoryId,
+      };
 }
 
 class TransactionInput {
@@ -87,6 +102,7 @@ class TransactionInput {
   final String? transactionDate;
   final String type;
   final String source;
+  final int? categoryId;
   final List<TransactionItemInput> items;
 
   const TransactionInput({
@@ -96,6 +112,7 @@ class TransactionInput {
     this.transactionDate,
     required this.type,
     this.source = 'manual',
+    this.categoryId,
     this.items = const [],
   });
 
@@ -106,6 +123,7 @@ class TransactionInput {
         if (transactionDate != null) 'transaction_date': transactionDate,
         'type': type,
         'source': source,
+        if (categoryId != null) 'category_id': categoryId,
         if (items.isNotEmpty) 'items': items.map((e) => e.toJson()).toList(),
       };
 }

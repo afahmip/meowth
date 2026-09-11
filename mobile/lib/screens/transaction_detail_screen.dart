@@ -149,7 +149,9 @@ class TransactionDetailScreen extends StatelessWidget {
             _infoCard(
               transaction.items
                   .map((item) => _row(
-                        item.description,
+                        item.quantity > 1
+                            ? '${item.description} ×${item.quantity}'
+                            : item.description,
                         '${transaction.currency} ${_formatAmount(item.amount)}',
                       ))
                   .toList(),

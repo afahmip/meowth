@@ -41,8 +41,9 @@ func (h *TransactionHandler) Summary(w http.ResponseWriter, r *http.Request) {
 	if from == "" || to == "" {
 		from, to = defaultSummaryRange()
 	}
+	mode := q.Get("mode")
 
-	summary, err := h.store.Summary(r.Context(), from, to)
+	summary, err := h.store.Summary(r.Context(), from, to, mode)
 	if err != nil {
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return

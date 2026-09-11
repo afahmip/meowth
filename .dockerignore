@@ -3,3 +3,6 @@
 **/service/meowth.db
 **/bin
 fly.toml
+mobile/
+roadmap/
+.git/

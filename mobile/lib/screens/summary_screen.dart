@@ -30,6 +30,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
   DateTime? _from;
   DateTime? _to;
+  String _mode = 'transactions';
   TransactionSummary? _summary;
   List<Transaction> _transactions = [];
   String? _selectedCategoryKey;
@@ -65,6 +66,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
       final summary = await _api.summary(
         from: _from == null ? null : _fmt(_from!),
         to: _to == null ? null : _fmt(_to!),
+        mode: _mode,
       );
       final txns = await _api.list(from: summary.from, to: summary.to);
       setState(() {
@@ -103,9 +105,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
   List<Transaction> get _filteredTransactions {
     final kw = _searchController.text.trim().toLowerCase();
     return _transactions.where((t) {
-      if (_selectedCategoryKey != null &&
-          _categoryKey(t.categoryId) != _selectedCategoryKey) {
-        return false;
+      if (_selectedCategoryKey != null) {
+        final matchesCategory = _mode == 'items'
+            ? t.items.any((i) => _categoryKey(i.categoryId) == _selectedCategoryKey)
+            : _categoryKey(t.categoryId) == _selectedCategoryKey;
+        if (!matchesCategory) return false;
       }
       if (kw.isNotEmpty &&
           !'${t.displayName} ${t.source}'.toLowerCase().contains(kw)) {
@@ -189,7 +193,12 @@ class _SummaryScreenState extends State<SummaryScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _modeToggle(),
+          ),
+          const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
@@ -287,6 +296,59 @@ class _SummaryScreenState extends State<SummaryScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _modeToggle() {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE5E7EB),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          for (final m in const ['transactions', 'items'])
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  if (_mode == m) return;
+                  setState(() {
+                    _mode = m;
+                    _selectedCategoryKey = null;
+                  });
+                  _load();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: _mode == m ? Colors.white : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: _mode == m
+                        ? [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.06),
+                              blurRadius: 3,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Text(
+                    m == 'transactions' ? 'Transactions' : 'Items',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _mode == m
+                          ? const Color(0xFF111827)
+                          : const Color(0xFF6B7280),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

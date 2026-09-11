@@ -4,6 +4,7 @@ type TransactionItem struct {
 	ID          int64   `json:"id"`
 	Description string  `json:"description"`
 	Amount      float64 `json:"amount"`
+	Quantity    int     `json:"quantity"`
 	CategoryID  *int64  `json:"category_id"`
 	CreatedAt   string  `json:"created_at"`
 }
@@ -42,6 +43,7 @@ type TransactionInput struct {
 type ItemInput struct {
 	Description string  `json:"description"`
 	Amount      float64 `json:"amount"`
+	Quantity    int     `json:"quantity"`
 	CategoryID  *int64  `json:"category_id"`
 }
 
@@ -55,6 +57,7 @@ type CategorySummary struct {
 type TransactionSummary struct {
 	From       string            `json:"from"`
 	To         string            `json:"to"`
+	Mode       string            `json:"mode"`
 	Total      float64           `json:"total"`
 	Categories []CategorySummary `json:"categories"`
 }

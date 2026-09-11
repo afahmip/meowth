@@ -26,11 +26,12 @@ import (
 )
 
 type ReceiptHandler struct {
-	store *store.ReceiptImageStore
+	store         *store.ReceiptImageStore
+	categoryStore *store.CategoryStore
 }
 
-func NewReceiptHandler(s *store.ReceiptImageStore) *ReceiptHandler {
-	return &ReceiptHandler{store: s}
+func NewReceiptHandler(s *store.ReceiptImageStore, cs *store.CategoryStore) *ReceiptHandler {
+	return &ReceiptHandler{store: s, categoryStore: cs}
 }
 
 func (h *ReceiptHandler) Analyze(w http.ResponseWriter, r *http.Request) {
@@ -58,7 +59,18 @@ func (h *ReceiptHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 	}
 	mediaType := extensionToMediaType(ext)
 
-	claudeResponse, err := analyzeImageWithClaude(r.Context(), imageBytes, mediaType)
+	categories, err := h.categoryStore.List(r.Context())
+	if err != nil {
+		log.Printf("list categories error: %v", err)
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	categoryNames := make([]string, len(categories))
+	for i, c := range categories {
+		categoryNames[i] = c.Name
+	}
+
+	claudeResponse, err := analyzeImageWithClaude(r.Context(), imageBytes, mediaType, categoryNames)
 	if err != nil {
 		log.Printf("claude analysis error: %v", err)
 		http.Error(w, "failed to analyze receipt: "+claudeErrorMessage(err), http.StatusBadGateway)
@@ -70,6 +82,13 @@ func (h *ReceiptHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 		log.Printf("claude response unmarshal error: %v (response: %s)", err, claudeResponse)
 		http.Error(w, "claude returned a response that could not be parsed as JSON", http.StatusBadGateway)
 		return
+	}
+	for i := range txns {
+		for j := range txns[i].Items {
+			if txns[i].Items[j].Quantity <= 0 {
+				txns[i].Items[j].Quantity = 1
+			}
+		}
 	}
 
 	// Use first transaction for filename generation
@@ -154,17 +173,19 @@ func claudeErrorMessage(err error) string {
 	return err.Error()
 }
 
-func analyzeImageWithClaude(ctx context.Context, imageBytes []byte, mediaType string) (string, error) {
+func analyzeImageWithClaude(ctx context.Context, imageBytes []byte, mediaType string, categoryNames []string) (string, error) {
 	client := anthropic.NewClient()
 	encoded := base64.StdEncoding.EncodeToString(imageBytes)
 
-	msg, err := client.Messages.New(ctx, anthropic.MessageNewParams{
-		Model:     anthropic.ModelClaudeHaiku4_5,
-		MaxTokens: 1024,
-		Messages: []anthropic.MessageParam{
-			anthropic.NewUserMessage(
-				anthropic.NewImageBlockBase64(mediaType, encoded),
-				anthropic.NewTextBlock(`Analyze this receipt image and extract all transactions visible.
+	categoryInstruction := "Leave the \"category\" field empty — no categories are available."
+	if len(categoryNames) > 0 {
+		categoryInstruction = fmt.Sprintf(
+			"Assign the best-matching category to \"category\" for both the transaction and each item, choosing only from this list: %s. If nothing fits well, leave \"category\" empty rather than inventing a new one.",
+			strings.Join(categoryNames, ", "),
+		)
+	}
+
+	prompt := fmt.Sprintf(`Analyze this receipt image and extract all transactions visible.
 
 Return ONLY a JSON array with this exact structure (no markdown, no explanation):
 [
@@ -175,8 +196,9 @@ Return ONLY a JSON array with this exact structure (no markdown, no explanation)
     "transaction_date": "YYYY-MM-DD",
     "type": "expense",
     "notes": "optional notes",
+    "category": "category name",
     "items": [
-      { "description": "item name", "amount": 0.00 }
+      { "description": "item name", "amount": 0.00, "quantity": 1, "category": "category name" }
     ]
   }
 ]
@@ -188,7 +210,17 @@ Rules:
 - currency should be inferred from symbols or context (default to USD if unknown)
 - transaction_date should be the date on the receipt (default to today if not found)
 - items should list individual line items if visible; omit the items field if none are visible
-- type is always "expense" for receipts`),
+- item quantity is the number of units of that item purchased, if shown on the receipt (e.g. "2x", "3 @ $1.00"); default it to 1 if no quantity is indicated
+- type is always "expense" for receipts
+- %s`, categoryInstruction)
+
+	msg, err := client.Messages.New(ctx, anthropic.MessageNewParams{
+		Model:     anthropic.ModelClaudeHaiku4_5,
+		MaxTokens: 1024,
+		Messages: []anthropic.MessageParam{
+			anthropic.NewUserMessage(
+				anthropic.NewImageBlockBase64(mediaType, encoded),
+				anthropic.NewTextBlock(prompt),
 			),
 		},
 	})

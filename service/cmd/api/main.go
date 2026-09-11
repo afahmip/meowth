@@ -32,10 +32,11 @@ func main() {
 	}
 
 	accountStore := store.NewAccountStore(db)
+	categoryStore := store.NewCategoryStore(db)
 	txnHandler := handler.NewTransactionHandler(store.NewTransactionStore(db), accountStore)
-	catHandler := handler.NewCategoryHandler(store.NewCategoryStore(db))
+	catHandler := handler.NewCategoryHandler(categoryStore)
 	accHandler := handler.NewAccountHandler(accountStore)
-	receiptHandler := handler.NewReceiptHandler(store.NewReceiptImageStore(db))
+	receiptHandler := handler.NewReceiptHandler(store.NewReceiptImageStore(db), categoryStore)
 	receiptEmailHandler := handler.NewReceiptEmailHandler(store.NewReceiptEmailStore(db))
 
 	mux := http.NewServeMux()

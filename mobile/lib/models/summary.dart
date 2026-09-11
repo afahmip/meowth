@@ -22,12 +22,14 @@ class CategorySummary {
 class TransactionSummary {
   final String from;
   final String to;
+  final String mode;
   final double total;
   final List<CategorySummary> categories;
 
   const TransactionSummary({
     required this.from,
     required this.to,
+    required this.mode,
     required this.total,
     required this.categories,
   });
@@ -36,6 +38,7 @@ class TransactionSummary {
       TransactionSummary(
         from: j['from'] ?? '',
         to: j['to'] ?? '',
+        mode: j['mode'] ?? 'transactions',
         total: (j['total'] as num).toDouble(),
         categories: (j['categories'] as List? ?? [])
             .map((e) => CategorySummary.fromJson(e))

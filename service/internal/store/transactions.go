@@ -106,7 +106,7 @@ func (s *TransactionStore) attachItems(ctx context.Context, txns []model.Transac
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, transaction_id, description, amount, category_id, created_at
+		SELECT id, transaction_id, description, amount, quantity, category_id, created_at
 		FROM transaction_items
 		WHERE transaction_id IN (`+strings.Join(ids, ",")+`)
 		ORDER BY id
@@ -119,7 +119,7 @@ func (s *TransactionStore) attachItems(ctx context.Context, txns []model.Transac
 	for rows.Next() {
 		var item model.TransactionItem
 		var txnID int64
-		rows.Scan(&item.ID, &txnID, &item.Description, &item.Amount, &item.CategoryID, &item.CreatedAt)
+		rows.Scan(&item.ID, &txnID, &item.Description, &item.Amount, &item.Quantity, &item.CategoryID, &item.CreatedAt)
 		if idx, ok := idxMap[txnID]; ok {
 			txns[idx].Items = append(txns[idx].Items, item)
 		}
@@ -183,9 +183,9 @@ func (s *TransactionStore) Create(ctx context.Context, input model.TransactionIn
 
 	for _, item := range input.Items {
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO transaction_items (transaction_id, description, amount, category_id)
-			VALUES (?, ?, ?, ?)`,
-			txnID, item.Description, item.Amount, item.CategoryID,
+			INSERT INTO transaction_items (transaction_id, description, amount, quantity, category_id)
+			VALUES (?, ?, ?, ?, ?)`,
+			txnID, item.Description, item.Amount, quantityOrDefault(item.Quantity), item.CategoryID,
 		); err != nil {
 			return 0, err
 		}
@@ -233,9 +233,9 @@ func (s *TransactionStore) AddItems(ctx context.Context, txnID string, items []m
 	ids := []int64{}
 	for _, item := range items {
 		res, err := s.db.ExecContext(ctx, `
-			INSERT INTO transaction_items (transaction_id, description, amount, category_id)
-			VALUES (?, ?, ?, ?)`,
-			txnID, item.Description, item.Amount, item.CategoryID,
+			INSERT INTO transaction_items (transaction_id, description, amount, quantity, category_id)
+			VALUES (?, ?, ?, ?, ?)`,
+			txnID, item.Description, item.Amount, quantityOrDefault(item.Quantity), item.CategoryID,
 		)
 		if err != nil {
 			return nil, err
@@ -251,10 +251,12 @@ func (s *TransactionStore) UpdateItem(ctx context.Context, itemID string, input 
 		UPDATE transaction_items
 		SET description = COALESCE(NULLIF(?, ''), description),
 		    amount = CASE WHEN ? != 0 THEN ? ELSE amount END,
+		    quantity = CASE WHEN ? != 0 THEN ? ELSE quantity END,
 		    category_id = COALESCE(?, category_id)
 		WHERE id = ?`,
 		input.Description,
 		input.Amount, input.Amount,
+		input.Quantity, input.Quantity,
 		input.CategoryID,
 		itemID,
 	)
@@ -263,6 +265,15 @@ func (s *TransactionStore) UpdateItem(ctx context.Context, itemID string, input 
 	}
 	n, _ := res.RowsAffected()
 	return n > 0, nil
+}
+
+// quantityOrDefault defaults an item's quantity to 1 when unset (e.g. not
+// detected on a receipt or omitted by a manual entry).
+func quantityOrDefault(q int) int {
+	if q <= 0 {
+		return 1
+	}
+	return q
 }
 
 func (s *TransactionStore) Delete(ctx context.Context, id string) (bool, error) {
@@ -274,21 +285,45 @@ func (s *TransactionStore) Delete(ctx context.Context, id string) (bool, error) 
 	return n > 0, nil
 }
 
-func (s *TransactionStore) Summary(ctx context.Context, from, to string) (model.TransactionSummary, error) {
-	rows, err := s.db.QueryContext(ctx, `
+// Summary modes: "transactions" groups by each transaction's own category;
+// "items" groups by each transaction item's own category instead, so a
+// receipt split across several categories is broken down at that finer
+// grain rather than bucketed under the transaction's single category.
+const (
+	SummaryModeTransactions = "transactions"
+	SummaryModeItems        = "items"
+)
+
+func (s *TransactionStore) Summary(ctx context.Context, from, to, mode string) (model.TransactionSummary, error) {
+	query := `
 		SELECT t.category_id, COALESCE(c.name, 'Uncategorized'), SUM(t.amount)
 		FROM transactions t
 		LEFT JOIN categories c ON c.id = t.category_id
 		WHERE t.type = 'expense' AND t.transaction_date >= ? AND t.transaction_date <= ?
 		GROUP BY t.category_id
 		ORDER BY SUM(t.amount) DESC
-	`, from, to)
+	`
+	if mode == SummaryModeItems {
+		query = `
+			SELECT ti.category_id, COALESCE(c.name, 'Uncategorized'), SUM(ti.amount)
+			FROM transaction_items ti
+			JOIN transactions t ON t.id = ti.transaction_id
+			LEFT JOIN categories c ON c.id = ti.category_id
+			WHERE t.type = 'expense' AND t.transaction_date >= ? AND t.transaction_date <= ?
+			GROUP BY ti.category_id
+			ORDER BY SUM(ti.amount) DESC
+		`
+	} else {
+		mode = SummaryModeTransactions
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, from, to)
 	if err != nil {
 		return model.TransactionSummary{}, err
 	}
 	defer rows.Close()
 
-	summary := model.TransactionSummary{From: from, To: to, Categories: []model.CategorySummary{}}
+	summary := model.TransactionSummary{From: from, To: to, Mode: mode, Categories: []model.CategorySummary{}}
 	for rows.Next() {
 		var cs model.CategorySummary
 		if err := rows.Scan(&cs.CategoryID, &cs.CategoryName, &cs.Total); err != nil {

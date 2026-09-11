@@ -217,6 +217,11 @@ func fetchAndAnalyzeEmail(ctx context.Context, svc *gmail.Service, msgID string)
 
 	var txn model.ReceiptTransaction
 	json.Unmarshal([]byte(claudeResponse), &txn)
+	for i := range txn.Items {
+		if txn.Items[i].Quantity <= 0 {
+			txn.Items[i].Quantity = 1
+		}
+	}
 
 	return emailAnalysis{
 		GmailMessageID: msgID,
@@ -246,7 +251,7 @@ Return ONLY a JSON object with this exact structure (no markdown, no explanation
   "type": "expense",
   "notes": "optional notes",
   "items": [
-    { "description": "item name", "amount": 0.00 }
+    { "description": "item name", "amount": 0.00, "quantity": 1 }
   ]
 }
 
@@ -255,6 +260,7 @@ Rules:
 - currency should be inferred from symbols or context (default to USD if unknown)
 - transaction_date should be the date on the receipt/email (default to today if not found)
 - items should list individual line items if visible; omit if none
+- item quantity is the number of units of that item purchased, if shown (e.g. "2x", "3 @ $1.00"); default it to 1 if no quantity is indicated
 - type is always "expense" for receipts`, subject, body)
 
 	msg, err := client.Messages.New(ctx, anthropic.MessageNewParams{
