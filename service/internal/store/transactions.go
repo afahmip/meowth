@@ -389,7 +389,7 @@ func (s *TransactionStore) Summary(ctx context.Context, from, to, mode string) (
 	query := `
 		SELECT t.category_id, COALESCE(c.name, 'Uncategorized'), COALESCE(c.emoji, ''), SUM(t.amount)
 		FROM transactions t
-		LEFT JOIN categories c ON c.id = t.category_id
+		LEFT JOIN categories c ON c.id = t.category_id AND c.deleted_at IS NULL
 		WHERE t.type = 'expense' AND t.deleted_at IS NULL AND t.transaction_date >= ? AND t.transaction_date <= ?
 		GROUP BY t.category_id
 		ORDER BY SUM(t.amount) DESC
@@ -399,7 +399,7 @@ func (s *TransactionStore) Summary(ctx context.Context, from, to, mode string) (
 			SELECT ti.category_id, COALESCE(c.name, 'Uncategorized'), COALESCE(c.emoji, ''), SUM(ti.amount)
 			FROM transaction_items ti
 			JOIN transactions t ON t.id = ti.transaction_id
-			LEFT JOIN categories c ON c.id = ti.category_id
+			LEFT JOIN categories c ON c.id = ti.category_id AND c.deleted_at IS NULL
 			WHERE t.type = 'expense' AND t.deleted_at IS NULL AND ti.deleted_at IS NULL AND t.transaction_date >= ? AND t.transaction_date <= ?
 			GROUP BY ti.category_id
 			ORDER BY SUM(ti.amount) DESC
