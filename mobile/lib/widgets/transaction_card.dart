@@ -1,25 +1,49 @@
 import 'package:flutter/material.dart';
+import '../models/category.dart';
 import '../models/transaction.dart';
+import '../utils/drive_image.dart';
 
 class TransactionCard extends StatelessWidget {
   final Transaction transaction;
+  final Map<int, Category> categoriesById;
   final VoidCallback onTap;
 
   const TransactionCard({
     super.key,
     required this.transaction,
+    required this.categoriesById,
     required this.onTap,
   });
+
+  Color get _amountColor => transaction.type == 'income'
+      ? const Color(0xFF16A34A)
+      : transaction.type == 'expense'
+          ? const Color(0xFFDC2626)
+          : const Color(0xFF2563EB);
+
+  // Transaction-level category first, then item categories in order, deduped
+  // by id, capped at 3 — this is what gets shown as overlapping badges.
+  List<String> _topCategoryEmojis() {
+    final seen = <int>{};
+    final emojis = <String>[];
+    void tryAdd(int? categoryId) {
+      if (categoryId == null || emojis.length >= 3 || seen.contains(categoryId)) return;
+      seen.add(categoryId);
+      final emoji = categoriesById[categoryId]?.emoji;
+      if (emoji != null && emoji.isNotEmpty) emojis.add(emoji);
+    }
+
+    tryAdd(transaction.categoryId);
+    for (final item in transaction.items) {
+      tryAdd(item.categoryId);
+    }
+    return emojis;
+  }
 
   @override
   Widget build(BuildContext context) {
     final isExpense = transaction.type == 'expense';
     final isIncome = transaction.type == 'income';
-    final amountColor = isIncome
-        ? const Color(0xFF16A34A)
-        : isExpense
-            ? const Color(0xFFDC2626)
-            : const Color(0xFF2563EB);
     final sign = isIncome ? '+' : isExpense ? '-' : '↔';
 
     return GestureDetector(
@@ -40,23 +64,7 @@ class TransactionCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: amountColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                isIncome
-                    ? Icons.arrow_downward_rounded
-                    : isExpense
-                        ? Icons.arrow_upward_rounded
-                        : Icons.swap_horiz_rounded,
-                color: amountColor,
-                size: 20,
-              ),
-            ),
+            _buildLeading(),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -113,11 +121,98 @@ class TransactionCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: amountColor,
+                color: _amountColor,
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // The avatar section: a receipt thumbnail (falling back to a plain
+  // direction icon when there's no image) with up to 3 category emoji
+  // badges overlapping its bottom-right corner like a stack of avatars.
+  Widget _buildLeading() {
+    final emojis = _topCategoryEmojis();
+    final imageSrc =
+        transaction.receiptImageUrl != null ? driveImageSrc(transaction.receiptImageUrl!) : null;
+
+    final base = imageSrc != null
+        ? ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.network(
+              imageSrc,
+              width: 40,
+              height: 40,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => _fallbackIcon(),
+            ),
+          )
+        : _fallbackIcon();
+
+    if (emojis.isEmpty) {
+      return SizedBox(width: 40, height: 40, child: base);
+    }
+
+    return SizedBox(
+      width: 46,
+      height: 46,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(top: 0, left: 0, child: base),
+          Positioned(
+            bottom: -6,
+            right: -6,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < emojis.length; i++)
+                  Container(
+                    margin: EdgeInsets.only(left: i == 0 ? 0 : -8),
+                    width: 18,
+                    height: 18,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          blurRadius: 2,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: Text(emojis[i], style: const TextStyle(fontSize: 10)),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _fallbackIcon() {
+    final isIncome = transaction.type == 'income';
+    final isExpense = transaction.type == 'expense';
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: _amountColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(
+        isIncome
+            ? Icons.arrow_downward_rounded
+            : isExpense
+                ? Icons.arrow_upward_rounded
+                : Icons.swap_horiz_rounded,
+        color: _amountColor,
+        size: 20,
       ),
     );
   }

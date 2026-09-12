@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../api/category_api.dart';
 import '../api/transaction_api.dart';
 import '../config.dart';
+import '../models/category.dart';
 import '../models/transaction.dart';
 import '../widgets/transaction_card.dart';
 import 'categories_screen.dart';
@@ -19,7 +21,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late final TransactionApi _api;
+  late final CategoryApi _categoryApi;
   List<Transaction> _transactions = [];
+  Map<int, Category> _categoriesById = {};
   bool _loading = true;
   String? _error;
 
@@ -27,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _api = TransactionApi(AppConfig.baseUrl);
+    _categoryApi = CategoryApi(AppConfig.baseUrl);
     _load();
   }
 
@@ -36,8 +41,13 @@ class _HomeScreenState extends State<HomeScreen> {
       _error = null;
     });
     try {
-      final txns = await _api.list();
-      setState(() => _transactions = txns);
+      final results = await Future.wait([_api.list(), _categoryApi.list()]);
+      final txns = results[0] as List<Transaction>;
+      final cats = results[1] as List<Category>;
+      setState(() {
+        _transactions = txns;
+        _categoriesById = {for (final c in cats) c.id: c};
+      });
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -215,8 +225,9 @@ class _HomeScreenState extends State<HomeScreen> {
         itemCount: _transactions.length,
         itemBuilder: (_, i) => TransactionCard(
           transaction: _transactions[i],
+          categoriesById: _categoriesById,
           onTap: () async {
-            final result = await Navigator.push<String>(
+            await Navigator.push<String>(
               context,
               MaterialPageRoute(
                 builder: (_) => TransactionDetailScreen(
@@ -225,7 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             );
-            if (result != null) _load();
+            _load();
           },
         ),
       ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../api/category_api.dart';
 import '../api/transaction_api.dart';
 import '../config.dart';
+import '../models/category.dart';
 import '../models/summary.dart';
 import '../models/transaction.dart';
 import '../widgets/storage_percentage_bar.dart';
@@ -27,12 +29,14 @@ class SummaryScreen extends StatefulWidget {
 
 class _SummaryScreenState extends State<SummaryScreen> {
   late final TransactionApi _api;
+  late final CategoryApi _categoryApi;
 
   DateTime? _from;
   DateTime? _to;
   String _mode = 'transactions';
   TransactionSummary? _summary;
   List<Transaction> _transactions = [];
+  Map<int, Category> _categoriesById = {};
   String? _selectedCategoryKey;
   final _searchController = TextEditingController();
 
@@ -43,7 +47,19 @@ class _SummaryScreenState extends State<SummaryScreen> {
   void initState() {
     super.initState();
     _api = TransactionApi(AppConfig.baseUrl);
+    _categoryApi = CategoryApi(AppConfig.baseUrl);
+    _loadCategories();
     _load();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final cats = await _categoryApi.list();
+      setState(() => _categoriesById = {for (final c in cats) c.id: c});
+    } catch (_) {
+      // Category emojis are a nice-to-have on this screen — leave the map
+      // empty and let cards fall back to their plain icon.
+    }
   }
 
   @override
@@ -410,15 +426,16 @@ class _SummaryScreenState extends State<SummaryScreen> {
         for (final t in txns)
           TransactionCard(
             transaction: t,
+            categoriesById: _categoriesById,
             onTap: () async {
-              final result = await Navigator.push<String>(
+              await Navigator.push<String>(
                 context,
                 MaterialPageRoute(
                   builder: (_) =>
                       TransactionDetailScreen(transaction: t, api: _api),
                 ),
               );
-              if (result != null) _load();
+              _load();
             },
           ),
       ],

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import '../api/category_api.dart';
 import '../api/transaction_api.dart';
+import '../config.dart';
+import '../models/category.dart';
 import '../models/transaction.dart';
 import '../utils/drive_image.dart';
 import 'transaction_form_screen.dart';
 
-class TransactionDetailScreen extends StatelessWidget {
+class TransactionDetailScreen extends StatefulWidget {
   final Transaction transaction;
   final TransactionApi api;
 
@@ -13,6 +16,34 @@ class TransactionDetailScreen extends StatelessWidget {
     required this.transaction,
     required this.api,
   });
+
+  @override
+  State<TransactionDetailScreen> createState() => _TransactionDetailScreenState();
+}
+
+class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
+  late final CategoryApi _categoryApi;
+  late List<TransactionItem> _items;
+  List<Category> _categories = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _categoryApi = CategoryApi(AppConfig.baseUrl);
+    _items = List.of(widget.transaction.items);
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final cats = await _categoryApi.list();
+      if (mounted) setState(() => _categories = cats);
+    } catch (_) {
+      // Item category editing just stays unavailable if this fails.
+    }
+  }
+
+  Map<int, Category> get _categoriesById => {for (final c in _categories) c.id: c};
 
   Future<void> _delete(BuildContext context) async {
     final confirmed = await showDialog<bool>(
@@ -34,12 +65,85 @@ class TransactionDetailScreen extends StatelessWidget {
       ),
     );
     if (confirmed != true) return;
-    await api.delete(transaction.id);
+    await widget.api.delete(widget.transaction.id);
     if (context.mounted) Navigator.pop(context, 'deleted');
+  }
+
+  Future<void> _editItemCategory(TransactionItem item) async {
+    if (_categories.isEmpty) return;
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text(
+                'Item Category',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF111827),
+                ),
+              ),
+            ),
+            for (final c in _categories)
+              ListTile(
+                leading: Text(
+                  c.emoji.isNotEmpty ? c.emoji : '🏷️',
+                  style: const TextStyle(fontSize: 20),
+                ),
+                title: Text(c.name),
+                trailing: item.categoryId == c.id
+                    ? const Icon(Icons.check, color: Color(0xFF111827))
+                    : null,
+                onTap: () => Navigator.pop(ctx, c.id),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || selected == item.categoryId) return;
+
+    final index = _items.indexWhere((i) => i.id == item.id);
+    final previous = _items[index];
+    setState(() {
+      _items[index] = TransactionItem(
+        id: item.id,
+        description: item.description,
+        amount: item.amount,
+        quantity: item.quantity,
+        categoryId: selected,
+        createdAt: item.createdAt,
+      );
+    });
+    try {
+      await widget.api.updateItem(
+        widget.transaction.id,
+        item.id,
+        TransactionItemInput(
+          description: item.description,
+          amount: item.amount,
+          quantity: item.quantity,
+          categoryId: selected,
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _items[index] = previous);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final transaction = widget.transaction;
     final isIncome = transaction.type == 'income';
     final isExpense = transaction.type == 'expense';
     final amountColor = isIncome
@@ -70,7 +174,7 @@ class TransactionDetailScreen extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                   builder: (_) => TransactionFormScreen(
-                    api: api,
+                    api: widget.api,
                     transaction: transaction,
                   ),
                 ),
@@ -151,20 +255,11 @@ class TransactionDetailScreen extends StatelessWidget {
                 : 'One-time'),
             _row('Importance', '${transaction.importanceLevel}/5'),
           ]),
-          if (transaction.items.isNotEmpty) ...[
+          if (_items.isNotEmpty) ...[
             const SizedBox(height: 12),
             _sectionTitle('Items'),
             const SizedBox(height: 8),
-            _infoCard(
-              transaction.items
-                  .map((item) => _row(
-                        item.quantity > 1
-                            ? '${item.description} ×${item.quantity}'
-                            : item.description,
-                        '${transaction.currency} ${_formatAmount(item.amount)}',
-                      ))
-                  .toList(),
-            ),
+            _infoCard(_items.map((item) => _itemRow(transaction, item)).toList()),
           ],
         ],
       ),
@@ -242,6 +337,63 @@ class TransactionDetailScreen extends StatelessWidget {
           ],
         ),
       );
+
+  Widget _itemRow(Transaction transaction, TransactionItem item) {
+    final category = item.categoryId != null ? _categoriesById[item.categoryId] : null;
+    return InkWell(
+      onTap: _categories.isEmpty ? null : () => _editItemCategory(item),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.quantity > 1
+                        ? '${item.description} ×${item.quantity}'
+                        : item.description,
+                    style: const TextStyle(fontSize: 14, color: Color(0xFF111827)),
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        category != null ? category.label : 'Uncategorized',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: category != null
+                              ? const Color(0xFF2563EB)
+                              : const Color(0xFF9CA3AF),
+                        ),
+                      ),
+                      if (_categories.isNotEmpty) ...[
+                        const SizedBox(width: 2),
+                        const Icon(Icons.expand_more, size: 14, color: Color(0xFF9CA3AF)),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '${transaction.currency} ${_formatAmount(item.amount)}',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF111827),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   String _formatAmount(double amount) {
     if (amount >= 1000000) {
