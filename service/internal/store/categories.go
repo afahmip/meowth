@@ -62,3 +62,16 @@ func (s *CategoryStore) Update(ctx context.Context, id, name, emoji string) (boo
 	n, _ := res.RowsAffected()
 	return n > 0, nil
 }
+
+// Delete removes a category outright. Transactions and items referencing it
+// keep their category_id, but every read joins categories with LEFT JOIN and
+// COALESCEs the name to "Uncategorized", so they degrade gracefully instead
+// of erroring or needing a reassignment step first.
+func (s *CategoryStore) Delete(ctx context.Context, id string) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM categories WHERE id = ?`, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}

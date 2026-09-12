@@ -55,6 +55,7 @@ func main() {
 	mux.HandleFunc("GET /categories", catHandler.List)
 	mux.HandleFunc("POST /categories", catHandler.Create)
 	mux.HandleFunc("PATCH /categories/{id}", catHandler.Update)
+	mux.HandleFunc("DELETE /categories/{id}", catHandler.Delete)
 
 	mux.HandleFunc("GET /transactions", txnHandler.List)
 	mux.HandleFunc("GET /transactions/summary", txnHandler.Summary)

@@ -67,3 +67,16 @@ func (h *CategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (h *CategoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	found, err := h.store.Delete(r.Context(), r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

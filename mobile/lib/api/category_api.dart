@@ -25,4 +25,22 @@ class CategoryApi {
     }
     return jsonDecode(res.body)['id'];
   }
+
+  Future<void> update(int id, String name, {String emoji = ''}) async {
+    final res = await http.patch(
+      Uri.parse('$baseUrl/categories/$id'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'name': name, 'emoji': emoji}),
+    );
+    if (res.statusCode != 204) {
+      throw Exception(res.body.isNotEmpty ? res.body.trim() : 'Failed to update category');
+    }
+  }
+
+  Future<void> delete(int id) async {
+    final res = await http.delete(Uri.parse('$baseUrl/categories/$id'));
+    if (res.statusCode != 204) {
+      throw Exception(res.body.isNotEmpty ? res.body.trim() : 'Failed to delete category');
+    }
+  }
 }

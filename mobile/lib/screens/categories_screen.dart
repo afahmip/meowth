@@ -15,7 +15,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   List<Category> _categories = [];
   bool _loading = true;
   String? _error;
-  bool _adding = false;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -39,20 +39,25 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     }
   }
 
-  Future<void> _addCategory() async {
-    final nameController = TextEditingController();
-    final emojiController = TextEditingController();
-    final result = await showDialog<(String, String)>(
+  Future<(String, String)?> _promptCategory({
+    required String title,
+    required String actionLabel,
+    String initialName = '',
+    String initialEmoji = '',
+  }) {
+    final nameController = TextEditingController(text: initialName);
+    final emojiController = TextEditingController(text: initialEmoji);
+    return showDialog<(String, String)>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('New Category'),
+        title: Text(title),
         content: Row(
           children: [
             SizedBox(
               width: 56,
               child: TextField(
                 controller: emojiController,
-                autofocus: true,
+                autofocus: initialName.isEmpty,
                 textAlign: TextAlign.center,
                 decoration: const InputDecoration(hintText: '🏷️'),
               ),
@@ -61,6 +66,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             Expanded(
               child: TextField(
                 controller: nameController,
+                autofocus: initialName.isNotEmpty,
                 decoration: const InputDecoration(hintText: 'Category name'),
                 onSubmitted: (v) => Navigator.pop(
                     ctx, (v.trim(), emojiController.text.trim())),
@@ -76,14 +82,18 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           TextButton(
             onPressed: () => Navigator.pop(
                 ctx, (nameController.text.trim(), emojiController.text.trim())),
-            child: const Text('Add'),
+            child: Text(actionLabel),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _addCategory() async {
+    final result = await _promptCategory(title: 'New Category', actionLabel: 'Add');
     if (result == null || result.$1.isEmpty) return;
 
-    setState(() => _adding = true);
+    setState(() => _saving = true);
     try {
       await _api.create(result.$1, emoji: result.$2);
       await _load();
@@ -93,7 +103,68 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             .showSnackBar(SnackBar(content: Text(e.toString())));
       }
     } finally {
-      if (mounted) setState(() => _adding = false);
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _editCategory(Category c) async {
+    final result = await _promptCategory(
+      title: 'Edit Category',
+      actionLabel: 'Save',
+      initialName: c.name,
+      initialEmoji: c.emoji,
+    );
+    if (result == null || result.$1.isEmpty) return;
+    if (result.$1 == c.name && result.$2 == c.emoji) return;
+
+    setState(() => _saving = true);
+    try {
+      await _api.update(c.id, result.$1, emoji: result.$2);
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _deleteCategory(Category c) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Category'),
+        content: Text(
+          'Delete "${c.label}"? Transactions and items using it will show as Uncategorized.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFDC2626)),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _saving = true);
+    try {
+      await _api.delete(c.id);
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -116,9 +187,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       ),
       body: _buildBody(),
       floatingActionButton: FloatingActionButton(
-        onPressed: _adding ? null : _addCategory,
+        onPressed: _saving ? null : _addCategory,
         backgroundColor: const Color(0xFF111827),
-        child: _adding
+        child: _saving
             ? const SizedBox(
                 width: 20,
                 height: 20,
@@ -196,37 +267,51 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         itemBuilder: (_, i) {
           final c = _categories[i];
           return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(8),
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: _saving ? null : () => _editCategory(c),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: c.emoji.isNotEmpty
+                            ? Text(c.emoji, style: const TextStyle(fontSize: 16))
+                            : const Icon(Icons.sell_outlined, size: 16, color: Color(0xFF2563EB)),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          c.name,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF111827),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 20, color: Color(0xFF9CA3AF)),
+                        onPressed: _saving ? null : () => _deleteCategory(c),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
                   ),
-                  child: c.emoji.isNotEmpty
-                      ? Text(c.emoji, style: const TextStyle(fontSize: 16))
-                      : const Icon(Icons.sell_outlined, size: 16, color: Color(0xFF2563EB)),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    c.name,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF111827),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           );
         },
