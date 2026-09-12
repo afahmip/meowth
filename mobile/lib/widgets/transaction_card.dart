@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/category.dart';
 import '../models/transaction.dart';
 import '../utils/drive_image.dart';
+import 'shimmer_placeholder.dart';
 
 class TransactionCard extends StatelessWidget {
   final Transaction transaction;
@@ -224,5 +225,41 @@ class TransactionCard extends StatelessWidget {
       return '${(amount / 1000).toStringAsFixed(0)}K';
     }
     return amount.toStringAsFixed(0);
+  }
+}
+
+/// Placeholder shaped like [TransactionCard], shown while the real list is
+/// still loading. Meant to sit inside a [ShimmerPlaceholder].
+class TransactionCardSkeleton extends StatelessWidget {
+  const TransactionCardSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          ShimmerBox(width: 40, height: 40, borderRadius: BorderRadius.circular(8)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const ShimmerBox(width: 120, height: 14),
+                const SizedBox(height: 8),
+                const ShimmerBox(width: 70, height: 11),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          const ShimmerBox(width: 56, height: 14),
+        ],
+      ),
+    );
   }
 }

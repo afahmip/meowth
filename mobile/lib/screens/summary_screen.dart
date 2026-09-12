@@ -5,6 +5,7 @@ import '../config.dart';
 import '../models/category.dart';
 import '../models/summary.dart';
 import '../models/transaction.dart';
+import '../widgets/shimmer_placeholder.dart';
 import '../widgets/storage_percentage_bar.dart';
 import '../widgets/transaction_card.dart';
 import 'transaction_detail_screen.dart';
@@ -248,7 +249,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
   Widget _buildBody() {
     if (_loading && _summary == null) {
-      return const Center(child: CircularProgressIndicator());
+      return _buildSkeleton();
     }
     if (_error != null && _summary == null) {
       return Center(
@@ -369,6 +370,92 @@ class _SummaryScreenState extends State<SummaryScreen> {
           ),
           const SizedBox(height: 8),
           _buildTransactionList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSkeleton() {
+    return ShimmerPlaceholder(
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: ShimmerBox(
+              width: double.infinity,
+              height: 48,
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ShimmerBox(
+                    width: double.infinity,
+                    height: 48,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ShimmerBox(
+                    width: double.infinity,
+                    height: 48,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: ShimmerBox(
+              width: double.infinity,
+              height: 40,
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const ShimmerBox(width: 100, height: 22),
+                const SizedBox(height: 12),
+                ShimmerBox(
+                  width: double.infinity,
+                  height: 22,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final w in [90.0, 110.0, 70.0, 100.0])
+                      ShimmerBox(width: w, height: 26, borderRadius: BorderRadius.circular(20)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: ShimmerBox(
+              width: double.infinity,
+              height: 44,
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (var i = 0; i < 4; i++) const TransactionCardSkeleton(),
         ],
       ),
     );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../api/category_api.dart';
 import '../config.dart';
 import '../models/category.dart';
+import '../widgets/shimmer_placeholder.dart';
 
 class CategoriesScreen extends StatefulWidget {
   const CategoriesScreen({super.key});
@@ -201,8 +202,15 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   }
 
   Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+    if (_loading && _categories.isEmpty) {
+      return ShimmerPlaceholder(
+        child: ListView.separated(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+          itemCount: 8,
+          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          itemBuilder: (_, __) => const _CategoryRowSkeleton(),
+        ),
+      );
     }
     if (_error != null) {
       return Center(
@@ -315,6 +323,30 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _CategoryRowSkeleton extends StatelessWidget {
+  const _CategoryRowSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          ShimmerBox(width: 32, height: 32, borderRadius: BorderRadius.circular(8)),
+          const SizedBox(width: 12),
+          const ShimmerBox(width: 100, height: 15),
+          const Spacer(),
+          const ShimmerBox(width: 20, height: 20),
+        ],
       ),
     );
   }

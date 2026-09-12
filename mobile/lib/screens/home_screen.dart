@@ -4,6 +4,7 @@ import '../api/transaction_api.dart';
 import '../config.dart';
 import '../models/category.dart';
 import '../models/transaction.dart';
+import '../widgets/shimmer_placeholder.dart';
 import '../widgets/transaction_card.dart';
 import 'categories_screen.dart';
 import 'pending_receipts_screen.dart';
@@ -202,8 +203,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+    if (_loading && _transactions.isEmpty) {
+      return ShimmerPlaceholder(
+        child: ListView.builder(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          itemCount: 8,
+          itemBuilder: (_, __) => const TransactionCardSkeleton(),
+        ),
+      );
     }
     if (_error != null) {
       return Center(

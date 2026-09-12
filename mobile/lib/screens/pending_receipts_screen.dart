@@ -7,6 +7,7 @@ import '../config.dart';
 import '../models/receipt.dart';
 import '../models/receipt_upload_task.dart';
 import '../services/receipt_upload_manager.dart';
+import '../widgets/shimmer_placeholder.dart';
 import 'receipt_upload_screen.dart';
 
 // Doubles as the "batch progress" view from the async upload RFC: on top of
@@ -140,8 +141,14 @@ class _PendingReceiptsScreenState extends State<PendingReceiptsScreen> {
         final sorted = List.of(uploadTasks)
           ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
-        if (_loading && sorted.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
+        if (_loading && sorted.isEmpty && _items.isEmpty) {
+          return ShimmerPlaceholder(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: 6,
+              itemBuilder: (_, __) => const _PendingReceiptCardSkeleton(),
+            ),
+          );
         }
         if (_error != null && sorted.isEmpty && _items.isEmpty) {
           return _buildError();
@@ -411,6 +418,40 @@ class _PendingReceiptCard extends StatelessWidget {
             const Icon(Icons.chevron_right, color: Color(0xFF9CA3AF)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _PendingReceiptCardSkeleton extends StatelessWidget {
+  const _PendingReceiptCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          ShimmerBox(width: 40, height: 40, borderRadius: BorderRadius.circular(8)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const ShimmerBox(width: 140, height: 15),
+                const SizedBox(height: 6),
+                const ShimmerBox(width: 90, height: 13),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          const ShimmerBox(width: 18, height: 18),
+        ],
       ),
     );
   }
