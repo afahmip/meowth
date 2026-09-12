@@ -20,6 +20,38 @@ const _palette = [
   Color(0xFF65A30D),
 ];
 
+const _monthNames = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+typedef _Period = ({int year, int month});
+
+// Each "month" here is a fixed billing cycle: the 25th of the previous
+// calendar month through the 24th of the named month — matching the
+// service's defaultSummaryRange (service/internal/handler/transactions.go).
+DateTime _periodStart(_Period p) => DateTime(p.year, p.month - 1, 25);
+DateTime _periodEnd(_Period p) => DateTime(p.year, p.month, 24);
+
+_Period _periodForDate(DateTime d) {
+  if (d.day >= 25) {
+    final next = DateTime(d.year, d.month + 1);
+    return (year: next.year, month: next.month);
+  }
+  return (year: d.year, month: d.month);
+}
+
+_Period _shiftPeriod(_Period p, int delta) {
+  final d = DateTime(p.year, p.month + delta);
+  return (year: d.year, month: d.month);
+}
+
+String _periodRangeLabel(_Period p) {
+  final start = _periodStart(p);
+  final end = _periodEnd(p);
+  return '${_monthNames[start.month - 1]} ${start.day} – ${_monthNames[end.month - 1]} ${end.day}';
+}
+
 class SummaryScreen extends StatefulWidget {
   const SummaryScreen({super.key});
 
@@ -33,6 +65,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
   DateTime? _from;
   DateTime? _to;
+  late _Period _period;
   String _mode = 'transactions';
   TransactionSummary? _summary;
   List<Transaction> _transactions = [];
@@ -48,6 +81,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
     super.initState();
     _api = TransactionApi(AppConfig.baseUrl);
     _categoryApi = CategoryApi(AppConfig.baseUrl);
+    _period = _periodForDate(DateTime.now());
+    _from = _periodStart(_period);
+    _to = _periodEnd(_period);
     _loadCategories();
     _load();
   }
@@ -96,6 +132,58 @@ class _SummaryScreenState extends State<SummaryScreen> {
     } finally {
       setState(() => _loading = false);
     }
+  }
+
+  _Period get _currentPeriod => _periodForDate(DateTime.now());
+
+  void _selectPeriod(_Period period) {
+    setState(() {
+      _period = period;
+      _from = _periodStart(period);
+      _to = _periodEnd(period);
+      _selectedCategoryKey = null;
+    });
+    _load();
+  }
+
+  Future<void> _pickPeriod() async {
+    final current = _currentPeriod;
+    final options = List.generate(24, (i) => _shiftPeriod(current, -i));
+    final selected = await showModalBottomSheet<_Period>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text(
+                'Select Month',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF111827),
+                ),
+              ),
+            ),
+            for (final p in options)
+              ListTile(
+                title: Text('${_monthNames[p.month - 1]} ${p.year}'),
+                subtitle: Text(_periodRangeLabel(p)),
+                trailing: p == _period
+                    ? const Icon(Icons.check, color: Color(0xFF111827))
+                    : null,
+                onTap: () => Navigator.pop(ctx, p),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected != null) _selectPeriod(selected);
   }
 
   Future<void> _pickDate(bool isFrom) async {
@@ -201,6 +289,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _periodSelector(),
+          ),
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
                 Expanded(child: _dateChip('From', _from, () => _pickDate(true))),
@@ -273,6 +366,61 @@ class _SummaryScreenState extends State<SummaryScreen> {
           ),
           const SizedBox(height: 8),
           _buildTransactionList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _periodSelector() {
+    final atCurrent = _period == _currentPeriod;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left, color: Color(0xFF111827)),
+            onPressed: () => _selectPeriod(_shiftPeriod(_period, -1)),
+            visualDensity: VisualDensity.compact,
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: _pickPeriod,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${_monthNames[_period.month - 1]} ${_period.year}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF111827),
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    _periodRangeLabel(_period),
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right, color: Color(0xFF111827)),
+            onPressed: atCurrent ? null : () => _selectPeriod(_shiftPeriod(_period, 1)),
+            visualDensity: VisualDensity.compact,
+          ),
         ],
       ),
     );

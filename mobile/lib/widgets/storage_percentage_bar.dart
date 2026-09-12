@@ -30,6 +30,11 @@ class StoragePercentageBar extends StatelessWidget {
     return SizedBox(
       height: 22,
       child: Row(
+        // Row's default cross-axis alignment only sizes children to their
+        // intrinsic size, and a childless DecoratedBox has none — without
+        // stretch every segment collapses to zero height and the bar
+        // renders as nothing.
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (var i = 0; i < categories.length; i++) ...[
             if (i > 0) const SizedBox(width: 3),
