@@ -233,6 +233,10 @@ func (s *TransactionStore) Create(ctx context.Context, input model.TransactionIn
 	return txnID, tx.Commit()
 }
 
+// Update overwrites category_id outright rather than COALESCE-preserving it
+// like the other fields, because the mobile edit form always sends the
+// category currently selected (including none) — a plain merge would make
+// it impossible to ever clear a transaction back to "Uncategorized".
 func (s *TransactionStore) Update(ctx context.Context, id string, input model.TransactionInput) (bool, error) {
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE transactions
@@ -240,7 +244,7 @@ func (s *TransactionStore) Update(ctx context.Context, id string, input model.Tr
 		    amount = CASE WHEN ? != 0 THEN ? ELSE amount END,
 		    currency = COALESCE(NULLIF(?, ''), currency),
 		    transaction_date = COALESCE(?, transaction_date),
-		    category_id = COALESCE(?, category_id),
+		    category_id = ?,
 		    type = COALESCE(NULLIF(?, ''), type),
 		    account_id = COALESCE(?, account_id),
 		    to_account_id = COALESCE(?, to_account_id)

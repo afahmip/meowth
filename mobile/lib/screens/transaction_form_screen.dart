@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import '../api/category_api.dart';
 import '../api/transaction_api.dart';
+import '../config.dart';
+import '../models/category.dart';
 import '../models/transaction.dart';
 
 // A row in the items editor. `id` is null for a row the user just added
@@ -35,10 +38,13 @@ class TransactionFormScreen extends StatefulWidget {
 
 class _TransactionFormScreenState extends State<TransactionFormScreen> {
   final _formKey = GlobalKey<FormState>();
+  late final CategoryApi _categoryApi;
   late final TextEditingController _merchantCtrl;
   late final TextEditingController _amountCtrl;
   late final TextEditingController _currencyCtrl;
   late String _type;
+  int? _categoryId;
+  List<Category> _categories = [];
   DateTime? _date;
   late List<_FormItem> _items;
   final List<int> _removedItemIds = [];
@@ -50,11 +56,16 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
   void initState() {
     super.initState();
     final t = widget.transaction;
+    _categoryApi = CategoryApi(AppConfig.baseUrl);
+    _categoryApi.list().then((cats) {
+      if (mounted) setState(() => _categories = cats);
+    }).catchError((_) {});
     _merchantCtrl = TextEditingController(text: t?.merchant ?? '');
     _amountCtrl = TextEditingController(
         text: t != null ? t.amount.toStringAsFixed(0) : '');
     _currencyCtrl = TextEditingController(text: t?.currency ?? 'IDR');
     _type = t?.type ?? 'expense';
+    _categoryId = t?.categoryId;
     if (t?.transactionDate != null) {
       _date = DateTime.tryParse(t!.transactionDate!);
     }
@@ -105,6 +116,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
             currency: _currencyCtrl.text.trim().toUpperCase(),
             type: _type,
             transactionDate: _date?.toIso8601String().substring(0, 10),
+            categoryId: _categoryId,
           ),
         );
 
@@ -133,6 +145,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
           currency: _currencyCtrl.text.trim().toUpperCase(),
           type: _type,
           transactionDate: _date?.toIso8601String().substring(0, 10),
+          categoryId: _categoryId,
           items: liveItems
               .map((item) => TransactionItemInput(
                     description: item.descCtrl.text.trim(),
@@ -268,6 +281,10 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+            _label('Category'),
+            const SizedBox(height: 8),
+            _categoryDropdown(),
             const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -315,6 +332,41 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
       ),
     );
   }
+
+  Widget _categoryDropdown() {
+    // Guards against passing a value DropdownButtonFormField doesn't have a
+    // matching item for yet, e.g. right after opening the edit form, before
+    // the category list has finished loading.
+    final value = _categories.any((c) => c.id == _categoryId) ? _categoryId : null;
+    return DropdownButtonFormField<int?>(
+      value: value,
+      isExpanded: true,
+      items: [
+        const DropdownMenuItem(value: null, child: Text('Uncategorized')),
+        for (final c in _categories) DropdownMenuItem(value: c.id, child: Text(c.name)),
+      ],
+      onChanged: (v) => setState(() => _categoryId = v),
+      decoration: _fieldDecoration(),
+    );
+  }
+
+  InputDecoration _fieldDecoration() => InputDecoration(
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF111827)),
+        ),
+      );
 
   Widget _itemRow(int index) {
     final item = _items[index];
