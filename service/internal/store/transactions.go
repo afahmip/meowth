@@ -58,7 +58,7 @@ func (s *TransactionStore) List(ctx context.Context, f ListFilter, accountStore 
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT DISTINCT t.id, t.source, t.merchant, t.amount, t.currency,
-		       t.transaction_date, t.category_id, t.type,
+		       t.transaction_date, t.category_id, t.type, t.spending_type, t.importance_level,
 		       t.account_id, t.to_account_id, t.gmail_message_id, t.created_at
 		FROM transactions t
 		LEFT JOIN transaction_items ti ON ti.transaction_id = t.id
@@ -76,7 +76,7 @@ func (s *TransactionStore) List(ctx context.Context, f ListFilter, accountStore 
 		var t model.Transaction
 		if err := rows.Scan(
 			&t.ID, &t.Source, &t.Merchant, &t.Amount, &t.Currency,
-			&t.TransactionDate, &t.CategoryID, &t.Type,
+			&t.TransactionDate, &t.CategoryID, &t.Type, &t.SpendingType, &t.ImportanceLevel,
 			&t.AccountID, &t.ToAccountID, &t.GmailMessageID, &t.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -209,10 +209,10 @@ func (s *TransactionStore) Create(ctx context.Context, input model.TransactionIn
 	defer tx.Rollback()
 
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO transactions (source, merchant, amount, currency, transaction_date, category_id, type, account_id, to_account_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO transactions (source, merchant, amount, currency, transaction_date, category_id, type, spending_type, importance_level, account_id, to_account_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		input.Source, input.Merchant, input.Amount, input.Currency,
-		input.TransactionDate, input.CategoryID, input.Type,
+		input.TransactionDate, input.CategoryID, input.Type, input.SpendingType, input.ImportanceLevel,
 		input.AccountID, input.ToAccountID,
 	)
 	if err != nil {
@@ -246,6 +246,8 @@ func (s *TransactionStore) Update(ctx context.Context, id string, input model.Tr
 		    transaction_date = COALESCE(?, transaction_date),
 		    category_id = ?,
 		    type = COALESCE(NULLIF(?, ''), type),
+		    spending_type = COALESCE(NULLIF(?, ''), spending_type),
+		    importance_level = CASE WHEN ? != 0 THEN ? ELSE importance_level END,
 		    account_id = COALESCE(?, account_id),
 		    to_account_id = COALESCE(?, to_account_id)
 		WHERE id = ?`,
@@ -255,6 +257,8 @@ func (s *TransactionStore) Update(ctx context.Context, id string, input model.Tr
 		input.TransactionDate,
 		input.CategoryID,
 		input.Type,
+		input.SpendingType,
+		input.ImportanceLevel, input.ImportanceLevel,
 		input.AccountID,
 		input.ToAccountID,
 		id,

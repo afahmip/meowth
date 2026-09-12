@@ -26,6 +26,8 @@ type ReceiptTransaction struct {
 	Type            string        `json:"type"`
 	Notes           string        `json:"notes,omitempty"`
 	CategoryID      *int64        `json:"category_id,omitempty"`
+	SpendingType    string        `json:"spending_type"`
+	ImportanceLevel int           `json:"importance_level"`
 	Items           []ReceiptItem `json:"items,omitempty"`
 }
 

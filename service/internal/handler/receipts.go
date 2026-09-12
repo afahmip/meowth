@@ -25,6 +25,12 @@ import (
 	"google.golang.org/api/option"
 )
 
+// claudeModel is used for every receipt/email analysis call. Classifying
+// spending_type and importance_level (see analyzeImageWithClaude) is a
+// heavier judgment call than the largely extractive OCR work this prompt
+// used to do, so this uses Sonnet rather than Haiku for better consistency.
+const claudeModel = anthropic.Model("claude-sonnet-5")
+
 type ReceiptHandler struct {
 	store         *store.ReceiptImageStore
 	categoryStore *store.CategoryStore
@@ -91,20 +97,7 @@ func (h *ReceiptHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for i := range txns {
-		// Claude is only given the current category list, but its response
-		// could still name a stale or hallucinated id — drop anything that
-		// doesn't match a real category rather than trusting it blindly.
-		if txns[i].CategoryID != nil && !validCategoryIDs[*txns[i].CategoryID] {
-			txns[i].CategoryID = nil
-		}
-		for j := range txns[i].Items {
-			if txns[i].Items[j].Quantity <= 0 {
-				txns[i].Items[j].Quantity = 1
-			}
-			if txns[i].Items[j].CategoryID != nil && !validCategoryIDs[*txns[i].Items[j].CategoryID] {
-				txns[i].Items[j].CategoryID = nil
-			}
-		}
+		sanitizeReceiptTransaction(&txns[i], validCategoryIDs)
 	}
 
 	// Use first transaction for filename generation
@@ -129,6 +122,33 @@ func (h *ReceiptHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 		"id":           receiptID,
 		"transactions": txns,
 	})
+}
+
+// sanitizeReceiptTransaction defends against a malformed or creative Claude
+// response the same way for every field it's asked to classify: a
+// category_id naming a stale or hallucinated id is dropped, an
+// importance_level outside 1-5 is clamped, and a spending_type outside the
+// two known values falls back to "one_time" — never trust the model's output
+// to already satisfy the schema it was asked for.
+func sanitizeReceiptTransaction(t *model.ReceiptTransaction, validCategoryIDs map[int64]bool) {
+	if t.CategoryID != nil && !validCategoryIDs[*t.CategoryID] {
+		t.CategoryID = nil
+	}
+	if t.SpendingType != "one_time" && t.SpendingType != "living_cost" {
+		t.SpendingType = "one_time"
+	}
+	if t.ImportanceLevel == 0 {
+		t.ImportanceLevel = 3
+	}
+	t.ImportanceLevel = clampImportance(t.ImportanceLevel)
+	for j := range t.Items {
+		if t.Items[j].Quantity <= 0 {
+			t.Items[j].Quantity = 1
+		}
+		if t.Items[j].CategoryID != nil && !validCategoryIDs[*t.Items[j].CategoryID] {
+			t.Items[j].CategoryID = nil
+		}
+	}
 }
 
 func (h *ReceiptHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -217,6 +237,8 @@ Return ONLY a JSON array with this exact structure (no markdown, no explanation)
     "type": "expense",
     "notes": "optional notes",
     "category_id": 0,
+    "spending_type": "one_time",
+    "importance_level": 3,
     "items": [
       { "description": "item name", "amount": 0.00, "quantity": 1, "category_id": 0 }
     ]
@@ -233,10 +255,12 @@ Rules:
 - item quantity is the number of units of that item purchased, if shown on the receipt (e.g. "2x", "3 @ $1.00"); default it to 1 if no quantity is indicated
 - type is always "expense" for receipts
 - category_id must be one of the given ids (as a JSON number), or null — never invent an id or return a category name
+- spending_type is "living_cost" for recurring baseline expenses (groceries/staples, utilities, rent, subscriptions, insurance, routine commute), or "one_time" for discretionary/one-off purchases (dining out, entertainment, gadgets, gifts, ad-hoc shopping, travel); default to "one_time" if unclear
+- importance_level is an integer 1-5 rating how essential the spend is: 5 for essential/unavoidable (groceries, utilities, medical, debt payments), 3 for routine/moderate spend, 1 for fully discretionary spend (entertainment, impulse purchases); default to 3 if unclear
 - %s`, categoryInstruction)
 
 	msg, err := client.Messages.New(ctx, anthropic.MessageNewParams{
-		Model:     anthropic.ModelClaudeHaiku4_5,
+		Model:     claudeModel,
 		MaxTokens: 1024,
 		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(

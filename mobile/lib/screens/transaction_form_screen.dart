@@ -43,6 +43,8 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
   late final TextEditingController _amountCtrl;
   late final TextEditingController _currencyCtrl;
   late String _type;
+  late String _spendingType;
+  late int _importanceLevel;
   int? _categoryId;
   List<Category> _categories = [];
   DateTime? _date;
@@ -65,6 +67,8 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
         text: t != null ? t.amount.toStringAsFixed(0) : '');
     _currencyCtrl = TextEditingController(text: t?.currency ?? 'IDR');
     _type = t?.type ?? 'expense';
+    _spendingType = t?.spendingType ?? 'one_time';
+    _importanceLevel = t?.importanceLevel ?? 3;
     _categoryId = t?.categoryId;
     if (t?.transactionDate != null) {
       _date = DateTime.tryParse(t!.transactionDate!);
@@ -115,6 +119,8 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
             amount: double.parse(_amountCtrl.text.trim()),
             currency: _currencyCtrl.text.trim().toUpperCase(),
             type: _type,
+            spendingType: _spendingType,
+            importanceLevel: _importanceLevel,
             transactionDate: _date?.toIso8601String().substring(0, 10),
             categoryId: _categoryId,
           ),
@@ -144,6 +150,8 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
           amount: double.parse(_amountCtrl.text.trim()),
           currency: _currencyCtrl.text.trim().toUpperCase(),
           type: _type,
+          spendingType: _spendingType,
+          importanceLevel: _importanceLevel,
           transactionDate: _date?.toIso8601String().substring(0, 10),
           categoryId: _categoryId,
           items: liveItems
@@ -202,6 +210,10 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
             _label('Type'),
             const SizedBox(height: 8),
             _typeSelector(),
+            const SizedBox(height: 16),
+            _label('Spending Type'),
+            const SizedBox(height: 8),
+            _spendingTypeSelector(),
             const SizedBox(height: 16),
             _label('Merchant / Description'),
             const SizedBox(height: 8),
@@ -285,6 +297,10 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
             _label('Category'),
             const SizedBox(height: 8),
             _categoryDropdown(),
+            const SizedBox(height: 16),
+            _label('Importance'),
+            const SizedBox(height: 8),
+            _importanceSelector(),
             const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -468,6 +484,84 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
             borderSide: const BorderSide(color: Color(0xFFDC2626)),
           ),
         ),
+      );
+
+  Widget _spendingTypeSelector() => Row(
+        children: [
+          for (final entry in const {
+            'one_time': 'One-time',
+            'living_cost': 'Living Cost',
+          }.entries)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _spendingType = entry.key),
+                child: Container(
+                  margin: EdgeInsets.only(
+                      right: entry.key != 'living_cost' ? 8 : 0),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: _spendingType == entry.key
+                        ? const Color(0xFF111827)
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _spendingType == entry.key
+                          ? const Color(0xFF111827)
+                          : const Color(0xFFE5E7EB),
+                    ),
+                  ),
+                  child: Text(
+                    entry.value,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: _spendingType == entry.key
+                          ? Colors.white
+                          : const Color(0xFF374151),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+
+  Widget _importanceSelector() => Row(
+        children: [
+          for (var level = 1; level <= 5; level++)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _importanceLevel = level),
+                child: Container(
+                  margin: EdgeInsets.only(right: level != 5 ? 8 : 0),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: _importanceLevel == level
+                        ? const Color(0xFF111827)
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _importanceLevel == level
+                          ? const Color(0xFF111827)
+                          : const Color(0xFFE5E7EB),
+                    ),
+                  ),
+                  child: Text(
+                    '$level',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: _importanceLevel == level
+                          ? Colors.white
+                          : const Color(0xFF374151),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       );
 
   Widget _typeSelector() => Row(

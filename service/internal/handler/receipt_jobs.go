@@ -240,20 +240,7 @@ func (h *ReceiptHandler) processJob(ctx context.Context, id int64) {
 		return
 	}
 	for i := range txns {
-		// Claude is only given the current category list, but its response
-		// could still name a stale or hallucinated id — drop anything that
-		// doesn't match a real category rather than trusting it blindly.
-		if txns[i].CategoryID != nil && !validCategoryIDs[*txns[i].CategoryID] {
-			txns[i].CategoryID = nil
-		}
-		for j := range txns[i].Items {
-			if txns[i].Items[j].Quantity <= 0 {
-				txns[i].Items[j].Quantity = 1
-			}
-			if txns[i].Items[j].CategoryID != nil && !validCategoryIDs[*txns[i].Items[j].CategoryID] {
-				txns[i].Items[j].CategoryID = nil
-			}
-		}
+		sanitizeReceiptTransaction(&txns[i], validCategoryIDs)
 	}
 
 	var firstDate, firstMerchant string

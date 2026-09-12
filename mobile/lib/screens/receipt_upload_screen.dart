@@ -175,6 +175,8 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
           currency: d.currency,
           transactionDate: d.transactionDate,
           type: d.type,
+          spendingType: d.spendingType,
+          importanceLevel: d.importanceLevel,
           source: 'receipt',
           categoryId: d.categoryId,
           items: d.items
@@ -504,6 +506,8 @@ class _DraftTransactionCardState extends State<_DraftTransactionCard> {
   late String _currency;
   late String _type;
   late int? _categoryId;
+  late String _spendingType;
+  late int _importanceLevel;
   DateTime? _date;
   late List<ReceiptItemDraft> _items;
   // Stable per-item identity, kept in lockstep with _items — same reasoning
@@ -520,6 +524,8 @@ class _DraftTransactionCardState extends State<_DraftTransactionCard> {
     _currency = _normalizeCurrency(d.currency);
     _type = d.type;
     _categoryId = d.categoryId;
+    _spendingType = d.spendingType;
+    _importanceLevel = d.importanceLevel;
     _date =
         d.transactionDate != null ? DateTime.tryParse(d.transactionDate!) : null;
     _items = List.of(d.items);
@@ -543,6 +549,8 @@ class _DraftTransactionCardState extends State<_DraftTransactionCard> {
       type: _type,
       notes: widget.draft.notes,
       categoryId: _categoryId,
+      spendingType: _spendingType,
+      importanceLevel: _importanceLevel,
       items: _items,
     ));
   }
@@ -706,6 +714,43 @@ class _DraftTransactionCardState extends State<_DraftTransactionCard> {
               _emit();
             },
             decoration: _fieldDecoration('Category'),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 4,
+            children: [
+              for (final entry in const {
+                'one_time': 'One-time',
+                'living_cost': 'Living Cost',
+              }.entries)
+                ChoiceChip(
+                  label: Text(entry.value),
+                  selected: _spendingType == entry.key,
+                  onSelected: (_) {
+                    setState(() => _spendingType = entry.key);
+                    _emit();
+                  },
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Text('Importance', style: TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+              const SizedBox(width: 8),
+              for (var level = 1; level <= 5; level++)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: ChoiceChip(
+                    label: Text('$level'),
+                    selected: _importanceLevel == level,
+                    onSelected: (_) {
+                      setState(() => _importanceLevel = level);
+                      _emit();
+                    },
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 10),
           const Divider(height: 1),

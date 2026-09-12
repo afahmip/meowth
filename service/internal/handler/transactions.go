@@ -86,6 +86,13 @@ func (h *TransactionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if input.Currency == "" {
 		input.Currency = "USD"
 	}
+	if input.SpendingType == "" {
+		input.SpendingType = "one_time"
+	}
+	if input.ImportanceLevel == 0 {
+		input.ImportanceLevel = 3
+	}
+	input.ImportanceLevel = clampImportance(input.ImportanceLevel)
 
 	id, err := h.store.Create(r.Context(), input)
 	if err != nil {
@@ -103,6 +110,10 @@ func (h *TransactionHandler) Update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
+	if input.ImportanceLevel != 0 {
+		input.ImportanceLevel = clampImportance(input.ImportanceLevel)
+	}
+
 	found, err := h.store.Update(r.Context(), r.PathValue("id"), input)
 	if err != nil {
 		http.Error(w, "db error", http.StatusInternalServerError)
@@ -113,6 +124,19 @@ func (h *TransactionHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// clampImportance keeps a client-supplied importance level within the 1-5
+// scale instead of rejecting the request outright, matching the handler's
+// existing default-don't-reject posture for other loosely-validated fields.
+func clampImportance(v int) int {
+	if v < 1 {
+		return 1
+	}
+	if v > 5 {
+		return 5
+	}
+	return v
 }
 
 func (h *TransactionHandler) AddItems(w http.ResponseWriter, r *http.Request) {

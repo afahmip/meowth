@@ -27,6 +27,8 @@ class ReceiptTransactionDraft {
   final String type;
   final String? notes;
   final int? categoryId;
+  final String spendingType;
+  final int importanceLevel;
   final List<ReceiptItemDraft> items;
 
   const ReceiptTransactionDraft({
@@ -37,6 +39,8 @@ class ReceiptTransactionDraft {
     required this.type,
     this.notes,
     this.categoryId,
+    this.spendingType = 'one_time',
+    this.importanceLevel = 3,
     this.items = const [],
   });
 
@@ -49,6 +53,8 @@ class ReceiptTransactionDraft {
         type: j['type'] ?? 'expense',
         notes: j['notes'],
         categoryId: j['category_id'],
+        spendingType: j['spending_type'] ?? 'one_time',
+        importanceLevel: (j['importance_level'] as num?)?.toInt() ?? 3,
         items: (j['items'] as List? ?? [])
             .map((e) => ReceiptItemDraft.fromJson(e))
             .toList(),

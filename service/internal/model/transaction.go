@@ -18,6 +18,8 @@ type Transaction struct {
 	TransactionDate *string           `json:"transaction_date"`
 	CategoryID      *int64            `json:"category_id"`
 	Type            string            `json:"type"`
+	SpendingType    string            `json:"spending_type"`
+	ImportanceLevel int               `json:"importance_level"`
 	AccountID       *int64            `json:"account_id"`
 	Account         *Account          `json:"account,omitempty"`
 	ToAccountID     *int64            `json:"to_account_id"`
@@ -36,6 +38,8 @@ type TransactionInput struct {
 	TransactionDate *string     `json:"transaction_date"`
 	CategoryID      *int64      `json:"category_id"`
 	Type            string      `json:"type"`
+	SpendingType    string      `json:"spending_type"`
+	ImportanceLevel int         `json:"importance_level"`
 	AccountID       *int64      `json:"account_id"`
 	ToAccountID     *int64      `json:"to_account_id"`
 	Items           []ItemInput `json:"items"`

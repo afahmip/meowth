@@ -217,11 +217,7 @@ func fetchAndAnalyzeEmail(ctx context.Context, svc *gmail.Service, msgID string)
 
 	var txn model.ReceiptTransaction
 	json.Unmarshal([]byte(claudeResponse), &txn)
-	for i := range txn.Items {
-		if txn.Items[i].Quantity <= 0 {
-			txn.Items[i].Quantity = 1
-		}
-	}
+	sanitizeReceiptTransaction(&txn, nil)
 
 	return emailAnalysis{
 		GmailMessageID: msgID,
@@ -250,6 +246,8 @@ Return ONLY a JSON object with this exact structure (no markdown, no explanation
   "transaction_date": "YYYY-MM-DD",
   "type": "expense",
   "notes": "optional notes",
+  "spending_type": "one_time",
+  "importance_level": 3,
   "items": [
     { "description": "item name", "amount": 0.00, "quantity": 1 }
   ]
@@ -261,10 +259,12 @@ Rules:
 - transaction_date should be the date on the receipt/email (default to today if not found)
 - items should list individual line items if visible; omit if none
 - item quantity is the number of units of that item purchased, if shown (e.g. "2x", "3 @ $1.00"); default it to 1 if no quantity is indicated
-- type is always "expense" for receipts`, subject, body)
+- type is always "expense" for receipts
+- spending_type is "living_cost" for recurring baseline expenses (groceries/staples, utilities, rent, subscriptions, insurance, routine commute), or "one_time" for discretionary/one-off purchases (dining out, entertainment, gadgets, gifts, ad-hoc shopping, travel); default to "one_time" if unclear
+- importance_level is an integer 1-5 rating how essential the spend is: 5 for essential/unavoidable (groceries, utilities, medical, debt payments), 3 for routine/moderate spend, 1 for fully discretionary spend (entertainment, impulse purchases); default to 3 if unclear`, subject, body)
 
 	msg, err := client.Messages.New(ctx, anthropic.MessageNewParams{
-		Model:     anthropic.ModelClaudeHaiku4_5,
+		Model:     claudeModel,
 		MaxTokens: 1024,
 		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),

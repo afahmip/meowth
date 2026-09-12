@@ -146,6 +146,10 @@ class TransactionDetailScreen extends StatelessWidget {
               _row('Date', transaction.transactionDate!),
             _row('Source', transaction.source),
             _row('Currency', transaction.currency),
+            _row('Spending Type', transaction.spendingType == 'living_cost'
+                ? 'Living Cost'
+                : 'One-time'),
+            _row('Importance', '${transaction.importanceLevel}/5'),
           ]),
           if (transaction.items.isNotEmpty) ...[
             const SizedBox(height: 12),

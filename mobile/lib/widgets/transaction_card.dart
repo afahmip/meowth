@@ -72,14 +72,37 @@ class TransactionCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (transaction.transactionDate != null) ...[
+                  if (transaction.transactionDate != null || transaction.spendingType == 'living_cost') ...[
                     const SizedBox(height: 2),
-                    Text(
-                      transaction.transactionDate!,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF6B7280),
-                      ),
+                    Row(
+                      children: [
+                        if (transaction.transactionDate != null)
+                          Text(
+                            transaction.transactionDate!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF6B7280),
+                            ),
+                          ),
+                        if (transaction.spendingType == 'living_cost') ...[
+                          if (transaction.transactionDate != null) const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'Living Cost',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF2563EB),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ],
