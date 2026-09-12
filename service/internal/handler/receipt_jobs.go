@@ -274,7 +274,12 @@ func (h *ReceiptHandler) processJob(ctx context.Context, id int64) {
 		return
 	}
 
-	go h.uploadToDrive(receiptID, filename, job.ImageData, job.MediaType)
+	// Synchronous, not fire-and-forget: the job row stays "processing" (and
+	// so gets resumed by the recovery sweep if the Fly machine stops mid
+	// upload) for as long as this call is in flight. Once MarkDone runs
+	// below, the job is done for good and nothing will retry a Drive
+	// upload that hadn't finished yet.
+	h.uploadToDrive(receiptID, filename, job.ImageData, job.MediaType)
 
 	if err := h.jobStore.MarkDone(ctx, id, receiptID); err != nil {
 		log.Printf("receipt job %d: mark done error: %v", id, err)
