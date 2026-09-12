@@ -120,12 +120,15 @@ class _SummaryScreenState extends State<SummaryScreen> {
         to: _to == null ? null : _fmt(_to!),
         mode: _mode,
       );
-      final txns = await _api.list(from: summary.from, to: summary.to);
+      // This screen filters/searches its transaction list entirely on the
+      // client, so it needs the whole period in one page rather than the
+      // small pages the infinite-scrolling home list uses.
+      final page = await _api.list(from: summary.from, to: summary.to, limit: 200);
       setState(() {
         _summary = summary;
         _from = DateTime.parse(summary.from);
         _to = DateTime.parse(summary.to);
-        _transactions = txns;
+        _transactions = page.items;
       });
     } catch (e) {
       setState(() => _error = e.toString());

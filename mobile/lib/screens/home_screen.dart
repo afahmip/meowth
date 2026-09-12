@@ -20,11 +20,16 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static const _pageSize = 30;
+
   late final TransactionApi _api;
   late final CategoryApi _categoryApi;
+  final _scrollController = ScrollController();
   List<Transaction> _transactions = [];
   Map<int, Category> _categoriesById = {};
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = true;
   String? _error;
 
   @override
@@ -32,7 +37,23 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _api = TransactionApi(AppConfig.baseUrl);
     _categoryApi = CategoryApi(AppConfig.baseUrl);
+    _scrollController.addListener(_onScroll);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_hasMore || _loadingMore) return;
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      _loadMore();
+    }
   }
 
   Future<void> _load() async {
@@ -41,17 +62,36 @@ class _HomeScreenState extends State<HomeScreen> {
       _error = null;
     });
     try {
-      final results = await Future.wait([_api.list(), _categoryApi.list()]);
-      final txns = results[0] as List<Transaction>;
+      final results = await Future.wait([
+        _api.list(limit: _pageSize),
+        _categoryApi.list(),
+      ]);
+      final page = results[0] as TransactionPage;
       final cats = results[1] as List<Category>;
       setState(() {
-        _transactions = txns;
+        _transactions = page.items;
+        _hasMore = page.hasMore;
         _categoriesById = {for (final c in cats) c.id: c};
       });
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
       setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadMore() async {
+    setState(() => _loadingMore = true);
+    try {
+      final page = await _api.list(limit: _pageSize, offset: _transactions.length);
+      setState(() {
+        _transactions = [..._transactions, ...page.items];
+        _hasMore = page.hasMore;
+      });
+    } catch (_) {
+      // Leave _hasMore as-is so scrolling near the bottom again retries.
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
     }
   }
 
@@ -221,24 +261,39 @@ class _HomeScreenState extends State<HomeScreen> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
+        controller: _scrollController,
         padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: _transactions.length,
-        itemBuilder: (_, i) => TransactionCard(
-          transaction: _transactions[i],
-          categoriesById: _categoriesById,
-          onTap: () async {
-            await Navigator.push<String>(
-              context,
-              MaterialPageRoute(
-                builder: (_) => TransactionDetailScreen(
-                  transaction: _transactions[i],
-                  api: _api,
+        itemCount: _transactions.length + (_hasMore ? 1 : 0),
+        itemBuilder: (_, i) {
+          if (i >= _transactions.length) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ),
             );
-            _load();
-          },
-        ),
+          }
+          return TransactionCard(
+            transaction: _transactions[i],
+            categoriesById: _categoriesById,
+            onTap: () async {
+              await Navigator.push<String>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => TransactionDetailScreen(
+                    transaction: _transactions[i],
+                    api: _api,
+                  ),
+                ),
+              );
+              _load();
+            },
+          );
+        },
       ),
     );
   }

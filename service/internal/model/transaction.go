@@ -52,6 +52,11 @@ type ItemInput struct {
 	CategoryID  *int64  `json:"category_id"`
 }
 
+type TransactionPage struct {
+	Items   []Transaction `json:"items"`
+	HasMore bool          `json:"has_more"`
+}
+
 type CategorySummary struct {
 	CategoryID    *int64  `json:"category_id"`
 	CategoryName  string  `json:"category_name"`

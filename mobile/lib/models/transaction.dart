@@ -83,6 +83,20 @@ class Transaction {
   String get displayName => merchant?.isNotEmpty == true ? merchant! : source;
 }
 
+class TransactionPage {
+  final List<Transaction> items;
+  final bool hasMore;
+
+  const TransactionPage({required this.items, required this.hasMore});
+
+  factory TransactionPage.fromJson(Map<String, dynamic> j) => TransactionPage(
+        items: (j['items'] as List? ?? [])
+            .map((e) => Transaction.fromJson(e))
+            .toList(),
+        hasMore: j['has_more'] ?? false,
+      );
+}
+
 class TransactionItemInput {
   final String description;
   final double amount;

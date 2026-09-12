@@ -3,10 +3,16 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/afahmip/meowth/internal/model"
 	"github.com/afahmip/meowth/internal/store"
+)
+
+const (
+	defaultListLimit = 30
+	maxListLimit     = 200
 )
 
 type TransactionHandler struct {
@@ -20,19 +26,33 @@ func NewTransactionHandler(s *store.TransactionStore, as *store.AccountStore) *T
 
 func (h *TransactionHandler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	txns, err := h.store.List(r.Context(), store.ListFilter{
+
+	limit, err := strconv.Atoi(q.Get("limit"))
+	if err != nil || limit <= 0 {
+		limit = defaultListLimit
+	} else if limit > maxListLimit {
+		limit = maxListLimit
+	}
+	offset, err := strconv.Atoi(q.Get("offset"))
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	txns, hasMore, err := h.store.List(r.Context(), store.ListFilter{
 		CategoryID: q.Get("category_id"),
 		AccountID:  q.Get("account_id"),
 		From:       q.Get("from"),
 		To:         q.Get("to"),
 		Keyword:    q.Get("q"),
+		Limit:      limit,
+		Offset:     offset,
 	}, h.accountStore)
 	if err != nil {
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(txns)
+	json.NewEncoder(w).Encode(model.TransactionPage{Items: txns, HasMore: hasMore})
 }
 
 func (h *TransactionHandler) Summary(w http.ResponseWriter, r *http.Request) {

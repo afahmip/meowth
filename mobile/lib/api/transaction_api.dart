@@ -8,24 +8,26 @@ class TransactionApi {
 
   const TransactionApi(this.baseUrl);
 
-  Future<List<Transaction>> list({
+  Future<TransactionPage> list({
     String? categoryId,
     String? from,
     String? to,
     String? keyword,
+    int limit = 100,
+    int offset = 0,
   }) async {
     final params = <String, String>{
       if (categoryId != null) 'category_id': categoryId,
       if (from != null) 'from': from,
       if (to != null) 'to': to,
       if (keyword != null && keyword.isNotEmpty) 'q': keyword,
+      'limit': '$limit',
+      'offset': '$offset',
     };
-    final uri = Uri.parse('$baseUrl/transactions')
-        .replace(queryParameters: params.isEmpty ? null : params);
+    final uri = Uri.parse('$baseUrl/transactions').replace(queryParameters: params);
     final res = await http.get(uri);
     if (res.statusCode != 200) throw Exception('Failed to load transactions');
-    final List data = jsonDecode(res.body);
-    return data.map((e) => Transaction.fromJson(e)).toList();
+    return TransactionPage.fromJson(jsonDecode(res.body));
   }
 
   Future<TransactionSummary> summary({String? from, String? to, String? mode}) async {

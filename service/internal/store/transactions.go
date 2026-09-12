@@ -23,9 +23,13 @@ type ListFilter struct {
 	From       string
 	To         string
 	Keyword    string
+	Limit      int
+	Offset     int
 }
 
-func (s *TransactionStore) List(ctx context.Context, f ListFilter, accountStore *AccountStore) ([]model.Transaction, error) {
+// List returns at most f.Limit transactions starting at f.Offset, plus
+// whether more match beyond this page.
+func (s *TransactionStore) List(ctx context.Context, f ListFilter, accountStore *AccountStore) ([]model.Transaction, bool, error) {
 	conditions := []string{"t.deleted_at IS NULL"}
 	args := []any{}
 
@@ -56,6 +60,9 @@ func (s *TransactionStore) List(ctx context.Context, f ListFilter, accountStore 
 		where = "WHERE " + strings.Join(conditions, " AND ")
 	}
 
+	// Fetch one extra row beyond the page so hasMore can be reported without
+	// a separate COUNT query, then trim it off below.
+	pageArgs := append(append([]any{}, args...), f.Limit+1, f.Offset)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT DISTINCT t.id, t.source, t.merchant, t.amount, t.currency,
 		       t.transaction_date, t.category_id, t.type, t.spending_type, t.importance_level,
@@ -64,10 +71,10 @@ func (s *TransactionStore) List(ctx context.Context, f ListFilter, accountStore 
 		LEFT JOIN transaction_items ti ON ti.transaction_id = t.id AND ti.deleted_at IS NULL
 		`+where+`
 		ORDER BY t.transaction_date DESC, t.created_at DESC
-		LIMIT 100
-	`, args...)
+		LIMIT ? OFFSET ?
+	`, pageArgs...)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer rows.Close()
 
@@ -79,25 +86,30 @@ func (s *TransactionStore) List(ctx context.Context, f ListFilter, accountStore 
 			&t.TransactionDate, &t.CategoryID, &t.Type, &t.SpendingType, &t.ImportanceLevel,
 			&t.AccountID, &t.ToAccountID, &t.GmailMessageID, &t.CreatedAt,
 		); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		t.Items = []model.TransactionItem{}
 		txns = append(txns, t)
 	}
+
+	hasMore := len(txns) > f.Limit
+	if hasMore {
+		txns = txns[:f.Limit]
+	}
 	if txns == nil {
-		return []model.Transaction{}, nil
+		return []model.Transaction{}, false, nil
 	}
 
 	if err := s.attachItems(ctx, txns); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if err := s.attachAccounts(ctx, txns, accountStore); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if err := s.attachReceiptImages(ctx, txns); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return txns, nil
+	return txns, hasMore, nil
 }
 
 func (s *TransactionStore) attachItems(ctx context.Context, txns []model.Transaction) error {
