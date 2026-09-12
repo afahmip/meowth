@@ -40,16 +40,33 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   }
 
   Future<void> _addCategory() async {
-    final controller = TextEditingController();
-    final name = await showDialog<String>(
+    final nameController = TextEditingController();
+    final emojiController = TextEditingController();
+    final result = await showDialog<(String, String)>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('New Category'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'Category name'),
-          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        content: Row(
+          children: [
+            SizedBox(
+              width: 56,
+              child: TextField(
+                controller: emojiController,
+                autofocus: true,
+                textAlign: TextAlign.center,
+                decoration: const InputDecoration(hintText: '🏷️'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: nameController,
+                decoration: const InputDecoration(hintText: 'Category name'),
+                onSubmitted: (v) => Navigator.pop(
+                    ctx, (v.trim(), emojiController.text.trim())),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -57,17 +74,18 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            onPressed: () => Navigator.pop(
+                ctx, (nameController.text.trim(), emojiController.text.trim())),
             child: const Text('Add'),
           ),
         ],
       ),
     );
-    if (name == null || name.isEmpty) return;
+    if (result == null || result.$1.isEmpty) return;
 
     setState(() => _adding = true);
     try {
-      await _api.create(name);
+      await _api.create(result.$1, emoji: result.$2);
       await _load();
     } catch (e) {
       if (mounted) {
@@ -188,11 +206,14 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 Container(
                   width: 32,
                   height: 32,
+                  alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: const Color(0xFFEFF6FF),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.sell_outlined, size: 16, color: Color(0xFF2563EB)),
+                  child: c.emoji.isNotEmpty
+                      ? Text(c.emoji, style: const TextStyle(fontSize: 16))
+                      : const Icon(Icons.sell_outlined, size: 16, color: Color(0xFF2563EB)),
                 ),
                 const SizedBox(width: 12),
                 Expanded(

@@ -707,7 +707,7 @@ class _DraftTransactionCardState extends State<_DraftTransactionCard> {
             items: [
               const DropdownMenuItem(value: null, child: Text('Uncategorized')),
               for (final c in widget.categories)
-                DropdownMenuItem(value: c.id, child: Text(c.name)),
+                DropdownMenuItem(value: c.id, child: Text(c.label)),
             ],
             onChanged: (v) {
               setState(() => _categoryId = v);
@@ -883,7 +883,7 @@ class _ItemRowState extends State<_ItemRow> {
                     items: [
                       const DropdownMenuItem(value: null, child: Text('Uncategorized')),
                       for (final c in widget.categories)
-                        DropdownMenuItem(value: c.id, child: Text(c.name)),
+                        DropdownMenuItem(value: c.id, child: Text(c.label)),
                     ],
                     onChanged: (v) {
                       setState(() => _categoryId = v);

@@ -359,7 +359,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
       isExpanded: true,
       items: [
         const DropdownMenuItem(value: null, child: Text('Uncategorized')),
-        for (final c in _categories) DropdownMenuItem(value: c.id, child: Text(c.name)),
+        for (final c in _categories) DropdownMenuItem(value: c.id, child: Text(c.label)),
       ],
       onChanged: (v) => setState(() => _categoryId = v),
       decoration: _fieldDecoration(),

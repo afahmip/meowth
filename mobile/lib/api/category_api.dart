@@ -14,11 +14,11 @@ class CategoryApi {
     return data.map((e) => Category.fromJson(e)).toList();
   }
 
-  Future<int> create(String name) async {
+  Future<int> create(String name, {String emoji = ''}) async {
     final res = await http.post(
       Uri.parse('$baseUrl/categories'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'name': name}),
+      body: jsonEncode({'name': name, 'emoji': emoji}),
     );
     if (res.statusCode != 201) {
       throw Exception(res.body.isNotEmpty ? res.body.trim() : 'Failed to create category');

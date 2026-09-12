@@ -27,14 +27,15 @@ func (h *CategoryHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *CategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Name string `json:"name"`
+		Name  string `json:"name"`
+		Emoji string `json:"emoji"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
 		http.Error(w, "name is required", http.StatusBadRequest)
 		return
 	}
 
-	id, err := h.store.Create(r.Context(), body.Name)
+	id, err := h.store.Create(r.Context(), body.Name, body.Emoji)
 	if err != nil {
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
@@ -47,14 +48,15 @@ func (h *CategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *CategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var body struct {
-		Name string `json:"name"`
+		Name  string `json:"name"`
+		Emoji string `json:"emoji"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
 		http.Error(w, "name is required", http.StatusBadRequest)
 		return
 	}
 
-	found, err := h.store.Update(r.Context(), id, body.Name)
+	found, err := h.store.Update(r.Context(), id, body.Name, body.Emoji)
 	if err != nil {
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return

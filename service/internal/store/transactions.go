@@ -352,7 +352,7 @@ const (
 
 func (s *TransactionStore) Summary(ctx context.Context, from, to, mode string) (model.TransactionSummary, error) {
 	query := `
-		SELECT t.category_id, COALESCE(c.name, 'Uncategorized'), SUM(t.amount)
+		SELECT t.category_id, COALESCE(c.name, 'Uncategorized'), COALESCE(c.emoji, ''), SUM(t.amount)
 		FROM transactions t
 		LEFT JOIN categories c ON c.id = t.category_id
 		WHERE t.type = 'expense' AND t.transaction_date >= ? AND t.transaction_date <= ?
@@ -361,7 +361,7 @@ func (s *TransactionStore) Summary(ctx context.Context, from, to, mode string) (
 	`
 	if mode == SummaryModeItems {
 		query = `
-			SELECT ti.category_id, COALESCE(c.name, 'Uncategorized'), SUM(ti.amount)
+			SELECT ti.category_id, COALESCE(c.name, 'Uncategorized'), COALESCE(c.emoji, ''), SUM(ti.amount)
 			FROM transaction_items ti
 			JOIN transactions t ON t.id = ti.transaction_id
 			LEFT JOIN categories c ON c.id = ti.category_id
@@ -382,7 +382,7 @@ func (s *TransactionStore) Summary(ctx context.Context, from, to, mode string) (
 	summary := model.TransactionSummary{From: from, To: to, Mode: mode, Categories: []model.CategorySummary{}}
 	for rows.Next() {
 		var cs model.CategorySummary
-		if err := rows.Scan(&cs.CategoryID, &cs.CategoryName, &cs.Total); err != nil {
+		if err := rows.Scan(&cs.CategoryID, &cs.CategoryName, &cs.CategoryEmoji, &cs.Total); err != nil {
 			return model.TransactionSummary{}, err
 		}
 		summary.Categories = append(summary.Categories, cs)

@@ -1,12 +1,14 @@
 class CategorySummary {
   final int? categoryId;
   final String categoryName;
+  final String categoryEmoji;
   final double total;
   final double percentage;
 
   const CategorySummary({
     this.categoryId,
     required this.categoryName,
+    this.categoryEmoji = '',
     required this.total,
     required this.percentage,
   });
@@ -14,9 +16,12 @@ class CategorySummary {
   factory CategorySummary.fromJson(Map<String, dynamic> j) => CategorySummary(
         categoryId: j['category_id'],
         categoryName: j['category_name'] ?? 'Uncategorized',
+        categoryEmoji: j['category_emoji'] ?? '',
         total: (j['total'] as num).toDouble(),
         percentage: (j['percentage'] as num).toDouble(),
       );
+
+  String get label => categoryEmoji.isNotEmpty ? '$categoryEmoji $categoryName' : categoryName;
 }
 
 class TransactionSummary {

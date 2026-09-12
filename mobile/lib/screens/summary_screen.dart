@@ -379,7 +379,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
             ),
             const SizedBox(width: 6),
             Text(
-              '${c.categoryName} ${c.percentage.toStringAsFixed(0)}%',
+              '${c.label} ${c.percentage.toStringAsFixed(0)}%',
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
