@@ -20,6 +20,7 @@ type Transaction struct {
 	Type            string            `json:"type"`
 	SpendingType    string            `json:"spending_type"`
 	ImportanceLevel int               `json:"importance_level"`
+	PaymentMethodID *int64            `json:"payment_method_id"`
 	AccountID       *int64            `json:"account_id"`
 	Account         *Account          `json:"account,omitempty"`
 	ToAccountID     *int64            `json:"to_account_id"`
@@ -40,6 +41,7 @@ type TransactionInput struct {
 	Type            string      `json:"type"`
 	SpendingType    string      `json:"spending_type"`
 	ImportanceLevel int         `json:"importance_level"`
+	PaymentMethodID *int64      `json:"payment_method_id"`
 	AccountID       *int64      `json:"account_id"`
 	ToAccountID     *int64      `json:"to_account_id"`
 	Items           []ItemInput `json:"items"`

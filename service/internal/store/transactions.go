@@ -66,7 +66,7 @@ func (s *TransactionStore) List(ctx context.Context, f ListFilter, accountStore 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT DISTINCT t.id, t.source, t.merchant, t.amount, t.currency,
 		       t.transaction_date, t.category_id, t.type, t.spending_type, t.importance_level,
-		       t.account_id, t.to_account_id, t.gmail_message_id, t.created_at
+		       t.payment_method_id, t.account_id, t.to_account_id, t.gmail_message_id, t.created_at
 		FROM transactions t
 		LEFT JOIN transaction_items ti ON ti.transaction_id = t.id AND ti.deleted_at IS NULL
 		`+where+`
@@ -84,7 +84,7 @@ func (s *TransactionStore) List(ctx context.Context, f ListFilter, accountStore 
 		if err := rows.Scan(
 			&t.ID, &t.Source, &t.Merchant, &t.Amount, &t.Currency,
 			&t.TransactionDate, &t.CategoryID, &t.Type, &t.SpendingType, &t.ImportanceLevel,
-			&t.AccountID, &t.ToAccountID, &t.GmailMessageID, &t.CreatedAt,
+			&t.PaymentMethodID, &t.AccountID, &t.ToAccountID, &t.GmailMessageID, &t.CreatedAt,
 		); err != nil {
 			return nil, false, err
 		}
@@ -221,11 +221,11 @@ func (s *TransactionStore) Create(ctx context.Context, input model.TransactionIn
 	defer tx.Rollback()
 
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO transactions (source, merchant, amount, currency, transaction_date, category_id, type, spending_type, importance_level, account_id, to_account_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO transactions (source, merchant, amount, currency, transaction_date, category_id, type, spending_type, importance_level, payment_method_id, account_id, to_account_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		input.Source, input.Merchant, input.Amount, input.Currency,
 		input.TransactionDate, input.CategoryID, input.Type, input.SpendingType, input.ImportanceLevel,
-		input.AccountID, input.ToAccountID,
+		input.PaymentMethodID, input.AccountID, input.ToAccountID,
 	)
 	if err != nil {
 		return 0, err
@@ -245,10 +245,10 @@ func (s *TransactionStore) Create(ctx context.Context, input model.TransactionIn
 	return txnID, tx.Commit()
 }
 
-// Update overwrites category_id outright rather than COALESCE-preserving it
-// like the other fields, because the mobile edit form always sends the
-// category currently selected (including none) — a plain merge would make
-// it impossible to ever clear a transaction back to "Uncategorized".
+// Update overwrites category_id and payment_method_id outright rather than
+// COALESCE-preserving them like the other fields, because the mobile edit
+// form always sends whatever is currently selected (including none) — a
+// plain merge would make it impossible to ever clear either back to unset.
 func (s *TransactionStore) Update(ctx context.Context, id string, input model.TransactionInput) (bool, error) {
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE transactions
@@ -260,6 +260,7 @@ func (s *TransactionStore) Update(ctx context.Context, id string, input model.Tr
 		    type = COALESCE(NULLIF(?, ''), type),
 		    spending_type = COALESCE(NULLIF(?, ''), spending_type),
 		    importance_level = CASE WHEN ? != 0 THEN ? ELSE importance_level END,
+		    payment_method_id = ?,
 		    account_id = COALESCE(?, account_id),
 		    to_account_id = COALESCE(?, to_account_id)
 		WHERE id = ? AND deleted_at IS NULL`,
@@ -271,6 +272,7 @@ func (s *TransactionStore) Update(ctx context.Context, id string, input model.Tr
 		input.Type,
 		input.SpendingType,
 		input.ImportanceLevel, input.ImportanceLevel,
+		input.PaymentMethodID,
 		input.AccountID,
 		input.ToAccountID,
 		id,

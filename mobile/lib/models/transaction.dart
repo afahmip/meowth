@@ -36,6 +36,7 @@ class Transaction {
   final String type;
   final String spendingType;
   final int importanceLevel;
+  final int? paymentMethodId;
   final int? accountId;
   final int? toAccountId;
   final String? receiptImageUrl;
@@ -53,6 +54,7 @@ class Transaction {
     required this.type,
     this.spendingType = 'one_time',
     this.importanceLevel = 3,
+    this.paymentMethodId,
     this.accountId,
     this.toAccountId,
     this.receiptImageUrl,
@@ -71,6 +73,7 @@ class Transaction {
         type: j['type'] ?? 'expense',
         spendingType: j['spending_type'] ?? 'one_time',
         importanceLevel: (j['importance_level'] as num?)?.toInt() ?? 3,
+        paymentMethodId: j['payment_method_id'],
         accountId: j['account_id'],
         toAccountId: j['to_account_id'],
         receiptImageUrl: j['receipt_image_url'],
@@ -128,6 +131,7 @@ class TransactionInput {
   final int importanceLevel;
   final String source;
   final int? categoryId;
+  final int? paymentMethodId;
   final List<TransactionItemInput> items;
 
   const TransactionInput({
@@ -140,6 +144,7 @@ class TransactionInput {
     this.importanceLevel = 3,
     this.source = 'manual',
     this.categoryId,
+    this.paymentMethodId,
     this.items = const [],
   });
 
@@ -153,6 +158,7 @@ class TransactionInput {
         'importance_level': importanceLevel,
         'source': source,
         if (categoryId != null) 'category_id': categoryId,
+        if (paymentMethodId != null) 'payment_method_id': paymentMethodId,
         if (items.isNotEmpty) 'items': items.map((e) => e.toJson()).toList(),
       };
 }

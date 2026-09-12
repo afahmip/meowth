@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../api/category_api.dart';
+import '../api/payment_method_api.dart';
 import '../api/transaction_api.dart';
 import '../config.dart';
 import '../models/category.dart';
+import '../models/payment_method.dart';
 import '../models/transaction.dart';
 import '../utils/drive_image.dart';
 import 'transaction_form_screen.dart';
@@ -23,15 +25,19 @@ class TransactionDetailScreen extends StatefulWidget {
 
 class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   late final CategoryApi _categoryApi;
+  late final PaymentMethodApi _paymentMethodApi;
   late List<TransactionItem> _items;
   List<Category> _categories = [];
+  List<PaymentMethod> _paymentMethods = [];
 
   @override
   void initState() {
     super.initState();
     _categoryApi = CategoryApi(AppConfig.baseUrl);
+    _paymentMethodApi = PaymentMethodApi(AppConfig.baseUrl);
     _items = List.of(widget.transaction.items);
     _loadCategories();
+    _loadPaymentMethods();
   }
 
   Future<void> _loadCategories() async {
@@ -43,7 +49,25 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     }
   }
 
+  Future<void> _loadPaymentMethods() async {
+    try {
+      final methods = await _paymentMethodApi.list();
+      if (mounted) setState(() => _paymentMethods = methods);
+    } catch (_) {
+      // Payment method row just stays hidden if this fails.
+    }
+  }
+
   Map<int, Category> get _categoriesById => {for (final c in _categories) c.id: c};
+
+  PaymentMethod? get _paymentMethod {
+    final id = widget.transaction.paymentMethodId;
+    if (id == null) return null;
+    for (final m in _paymentMethods) {
+      if (m.id == id) return m;
+    }
+    return null;
+  }
 
   Future<void> _delete(BuildContext context) async {
     final confirmed = await showDialog<bool>(
@@ -254,6 +278,8 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                 ? 'Living Cost'
                 : 'One-time'),
             _row('Importance', '${transaction.importanceLevel}/5'),
+            if (_paymentMethod != null)
+              _row('Payment Method', _paymentMethod!.label),
           ]),
           if (_items.isNotEmpty) ...[
             const SizedBox(height: 12),

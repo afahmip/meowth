@@ -7,6 +7,7 @@ import '../models/transaction.dart';
 import '../widgets/shimmer_placeholder.dart';
 import '../widgets/transaction_card.dart';
 import 'categories_screen.dart';
+import 'payment_methods_screen.dart';
 import 'pending_receipts_screen.dart';
 import 'receipt_upload_screen.dart';
 import 'summary_screen.dart';
@@ -119,6 +120,16 @@ class _HomeScreenState extends State<HomeScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const CategoriesScreen()),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.credit_card_outlined, color: Color(0xFF111827)),
+            tooltip: 'Payment Methods',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PaymentMethodsScreen()),
               );
             },
           ),

@@ -34,8 +34,10 @@ func main() {
 
 	accountStore := store.NewAccountStore(db)
 	categoryStore := store.NewCategoryStore(db)
+	paymentMethodStore := store.NewPaymentMethodStore(db)
 	txnHandler := handler.NewTransactionHandler(store.NewTransactionStore(db), accountStore)
 	catHandler := handler.NewCategoryHandler(categoryStore)
+	pmHandler := handler.NewPaymentMethodHandler(paymentMethodStore)
 	accHandler := handler.NewAccountHandler(accountStore)
 	receiptHandler := handler.NewReceiptHandler(store.NewReceiptImageStore(db), categoryStore, store.NewReceiptJobStore(db))
 	receiptEmailHandler := handler.NewReceiptEmailHandler(store.NewReceiptEmailStore(db))
@@ -56,6 +58,11 @@ func main() {
 	mux.HandleFunc("POST /categories", catHandler.Create)
 	mux.HandleFunc("PATCH /categories/{id}", catHandler.Update)
 	mux.HandleFunc("DELETE /categories/{id}", catHandler.Delete)
+
+	mux.HandleFunc("GET /payment-methods", pmHandler.List)
+	mux.HandleFunc("POST /payment-methods", pmHandler.Create)
+	mux.HandleFunc("PATCH /payment-methods/{id}", pmHandler.Update)
+	mux.HandleFunc("DELETE /payment-methods/{id}", pmHandler.Delete)
 
 	mux.HandleFunc("GET /transactions", txnHandler.List)
 	mux.HandleFunc("GET /transactions/summary", txnHandler.Summary)

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../api/category_api.dart';
+import '../api/payment_method_api.dart';
 import '../api/transaction_api.dart';
 import '../config.dart';
 import '../models/category.dart';
+import '../models/payment_method.dart';
 import '../models/transaction.dart';
 
 // A row in the items editor. `id` is null for a row the user just added
@@ -39,6 +41,7 @@ class TransactionFormScreen extends StatefulWidget {
 class _TransactionFormScreenState extends State<TransactionFormScreen> {
   final _formKey = GlobalKey<FormState>();
   late final CategoryApi _categoryApi;
+  late final PaymentMethodApi _paymentMethodApi;
   late final TextEditingController _merchantCtrl;
   late final TextEditingController _amountCtrl;
   late final TextEditingController _currencyCtrl;
@@ -46,7 +49,9 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
   late String _spendingType;
   late int _importanceLevel;
   int? _categoryId;
+  int? _paymentMethodId;
   List<Category> _categories = [];
+  List<PaymentMethod> _paymentMethods = [];
   DateTime? _date;
   late List<_FormItem> _items;
   final List<int> _removedItemIds = [];
@@ -62,6 +67,10 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
     _categoryApi.list().then((cats) {
       if (mounted) setState(() => _categories = cats);
     }).catchError((_) {});
+    _paymentMethodApi = PaymentMethodApi(AppConfig.baseUrl);
+    _paymentMethodApi.list().then((methods) {
+      if (mounted) setState(() => _paymentMethods = methods);
+    }).catchError((_) {});
     _merchantCtrl = TextEditingController(text: t?.merchant ?? '');
     _amountCtrl = TextEditingController(
         text: t != null ? t.amount.toStringAsFixed(0) : '');
@@ -70,6 +79,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
     _spendingType = t?.spendingType ?? 'one_time';
     _importanceLevel = t?.importanceLevel ?? 3;
     _categoryId = t?.categoryId;
+    _paymentMethodId = t?.paymentMethodId;
     if (t?.transactionDate != null) {
       _date = DateTime.tryParse(t!.transactionDate!);
     }
@@ -123,6 +133,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
             importanceLevel: _importanceLevel,
             transactionDate: _date?.toIso8601String().substring(0, 10),
             categoryId: _categoryId,
+            paymentMethodId: _paymentMethodId,
           ),
         );
 
@@ -154,6 +165,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
           importanceLevel: _importanceLevel,
           transactionDate: _date?.toIso8601String().substring(0, 10),
           categoryId: _categoryId,
+          paymentMethodId: _paymentMethodId,
           items: liveItems
               .map((item) => TransactionItemInput(
                     description: item.descCtrl.text.trim(),
@@ -298,6 +310,10 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
             const SizedBox(height: 8),
             _categoryDropdown(),
             const SizedBox(height: 16),
+            _label('Payment Method'),
+            const SizedBox(height: 8),
+            _paymentMethodDropdown(),
+            const SizedBox(height: 16),
             _label('Importance'),
             const SizedBox(height: 8),
             _importanceSelector(),
@@ -362,6 +378,22 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
         for (final c in _categories) DropdownMenuItem(value: c.id, child: Text(c.label)),
       ],
       onChanged: (v) => setState(() => _categoryId = v),
+      decoration: _fieldDecoration(),
+    );
+  }
+
+  Widget _paymentMethodDropdown() {
+    // Same not-yet-loaded guard as _categoryDropdown().
+    final value =
+        _paymentMethods.any((m) => m.id == _paymentMethodId) ? _paymentMethodId : null;
+    return DropdownButtonFormField<int?>(
+      value: value,
+      isExpanded: true,
+      items: [
+        const DropdownMenuItem(value: null, child: Text('None')),
+        for (final m in _paymentMethods) DropdownMenuItem(value: m.id, child: Text(m.label)),
+      ],
+      onChanged: (v) => setState(() => _paymentMethodId = v),
       decoration: _fieldDecoration(),
     );
   }
