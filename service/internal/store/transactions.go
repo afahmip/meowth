@@ -26,7 +26,7 @@ type ListFilter struct {
 }
 
 func (s *TransactionStore) List(ctx context.Context, f ListFilter, accountStore *AccountStore) ([]model.Transaction, error) {
-	conditions := []string{}
+	conditions := []string{"t.deleted_at IS NULL"}
 	args := []any{}
 
 	if f.CategoryID != "" {
@@ -61,7 +61,7 @@ func (s *TransactionStore) List(ctx context.Context, f ListFilter, accountStore 
 		       t.transaction_date, t.category_id, t.type, t.spending_type, t.importance_level,
 		       t.account_id, t.to_account_id, t.gmail_message_id, t.created_at
 		FROM transactions t
-		LEFT JOIN transaction_items ti ON ti.transaction_id = t.id
+		LEFT JOIN transaction_items ti ON ti.transaction_id = t.id AND ti.deleted_at IS NULL
 		`+where+`
 		ORDER BY t.transaction_date DESC, t.created_at DESC
 		LIMIT 100
@@ -111,7 +111,7 @@ func (s *TransactionStore) attachItems(ctx context.Context, txns []model.Transac
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, transaction_id, description, amount, quantity, category_id, created_at
 		FROM transaction_items
-		WHERE transaction_id IN (`+strings.Join(ids, ",")+`)
+		WHERE transaction_id IN (`+strings.Join(ids, ",")+`) AND deleted_at IS NULL
 		ORDER BY id
 	`)
 	if err != nil {
@@ -250,7 +250,7 @@ func (s *TransactionStore) Update(ctx context.Context, id string, input model.Tr
 		    importance_level = CASE WHEN ? != 0 THEN ? ELSE importance_level END,
 		    account_id = COALESCE(?, account_id),
 		    to_account_id = COALESCE(?, to_account_id)
-		WHERE id = ?`,
+		WHERE id = ? AND deleted_at IS NULL`,
 		input.Merchant,
 		input.Amount, input.Amount,
 		input.Currency,
@@ -272,7 +272,7 @@ func (s *TransactionStore) Update(ctx context.Context, id string, input model.Tr
 
 func (s *TransactionStore) Exists(ctx context.Context, id string) (bool, error) {
 	var count int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM transactions WHERE id = ?`, id).Scan(&count)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM transactions WHERE id = ? AND deleted_at IS NULL`, id).Scan(&count)
 	return count > 0, err
 }
 
@@ -300,7 +300,7 @@ func (s *TransactionStore) UpdateItem(ctx context.Context, itemID string, input 
 		    amount = CASE WHEN ? != 0 THEN ? ELSE amount END,
 		    quantity = CASE WHEN ? != 0 THEN ? ELSE quantity END,
 		    category_id = COALESCE(?, category_id)
-		WHERE id = ?`,
+		WHERE id = ? AND deleted_at IS NULL`,
 		input.Description,
 		input.Amount, input.Amount,
 		input.Quantity, input.Quantity,
@@ -315,7 +315,9 @@ func (s *TransactionStore) UpdateItem(ctx context.Context, itemID string, input 
 }
 
 func (s *TransactionStore) DeleteItem(ctx context.Context, itemID string) (bool, error) {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM transaction_items WHERE id = ?`, itemID)
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE transaction_items SET deleted_at = datetime('now')
+		WHERE id = ? AND deleted_at IS NULL`, itemID)
 	if err != nil {
 		return false, err
 	}
@@ -332,13 +334,34 @@ func quantityOrDefault(q int) int {
 	return q
 }
 
+// Delete soft-deletes a transaction and its items: rows are kept and marked
+// deleted_at instead of being removed, so they're recoverable and excluded
+// from reads (see List, Summary) rather than hard-deleted.
 func (s *TransactionStore) Delete(ctx context.Context, id string) (bool, error) {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM transactions WHERE id = ?`, id)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.ExecContext(ctx, `
+		UPDATE transactions SET deleted_at = datetime('now')
+		WHERE id = ? AND deleted_at IS NULL`, id)
 	if err != nil {
 		return false, err
 	}
 	n, _ := res.RowsAffected()
-	return n > 0, nil
+	if n == 0 {
+		return false, nil
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE transaction_items SET deleted_at = datetime('now')
+		WHERE transaction_id = ? AND deleted_at IS NULL`, id); err != nil {
+		return false, err
+	}
+
+	return true, tx.Commit()
 }
 
 // Summary modes: "transactions" groups by each transaction's own category;
@@ -355,7 +378,7 @@ func (s *TransactionStore) Summary(ctx context.Context, from, to, mode string) (
 		SELECT t.category_id, COALESCE(c.name, 'Uncategorized'), COALESCE(c.emoji, ''), SUM(t.amount)
 		FROM transactions t
 		LEFT JOIN categories c ON c.id = t.category_id
-		WHERE t.type = 'expense' AND t.transaction_date >= ? AND t.transaction_date <= ?
+		WHERE t.type = 'expense' AND t.deleted_at IS NULL AND t.transaction_date >= ? AND t.transaction_date <= ?
 		GROUP BY t.category_id
 		ORDER BY SUM(t.amount) DESC
 	`
@@ -365,7 +388,7 @@ func (s *TransactionStore) Summary(ctx context.Context, from, to, mode string) (
 			FROM transaction_items ti
 			JOIN transactions t ON t.id = ti.transaction_id
 			LEFT JOIN categories c ON c.id = ti.category_id
-			WHERE t.type = 'expense' AND t.transaction_date >= ? AND t.transaction_date <= ?
+			WHERE t.type = 'expense' AND t.deleted_at IS NULL AND ti.deleted_at IS NULL AND t.transaction_date >= ? AND t.transaction_date <= ?
 			GROUP BY ti.category_id
 			ORDER BY SUM(ti.amount) DESC
 		`
