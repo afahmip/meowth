@@ -11,6 +11,7 @@ import '../models/category.dart';
 import '../models/payment_method.dart';
 import '../models/transaction.dart';
 import '../utils/drive_image.dart';
+import '../utils/number_format.dart';
 
 // A row in the items editor. `id` is null for a row the user just added
 // that doesn't exist on the server yet, which is how submit tells "add"
@@ -51,22 +52,13 @@ class _ThousandsSeparatorInputFormatter extends TextInputFormatter {
     final decPart =
         dotIndex == -1 ? null : digitsAndDot.substring(dotIndex + 1).replaceAll('.', '');
 
-    final formatted = decPart == null ? addCommas(intPart) : '${addCommas(intPart)}.$decPart';
+    final formatted = decPart == null
+        ? addThousandsSeparators(intPart)
+        : '${addThousandsSeparators(intPart)}.$decPart';
     return TextEditingValue(
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),
     );
-  }
-
-  static String addCommas(String digits) {
-    if (digits.length <= 3) return digits;
-    final offset = digits.length % 3;
-    final buffer = StringBuffer();
-    for (var i = 0; i < digits.length; i++) {
-      if (i != 0 && (i - offset) % 3 == 0) buffer.write(',');
-      buffer.write(digits[i]);
-    }
-    return buffer.toString();
   }
 }
 
@@ -79,8 +71,8 @@ String _initialAmountText(double amount) {
   final isWhole = amount == amount.roundToDouble();
   final raw = isWhole ? amount.toStringAsFixed(0) : amount.toStringAsFixed(2);
   final dotIndex = raw.indexOf('.');
-  if (dotIndex == -1) return _ThousandsSeparatorInputFormatter.addCommas(raw);
-  final intPart = _ThousandsSeparatorInputFormatter.addCommas(raw.substring(0, dotIndex));
+  if (dotIndex == -1) return addThousandsSeparators(raw);
+  final intPart = addThousandsSeparators(raw.substring(0, dotIndex));
   return '$intPart${raw.substring(dotIndex)}';
 }
 

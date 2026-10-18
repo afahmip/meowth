@@ -7,6 +7,7 @@ import '../models/category.dart';
 import '../models/payment_method.dart';
 import '../models/transaction.dart';
 import '../utils/drive_image.dart';
+import '../utils/number_format.dart';
 import 'transaction_form_screen.dart';
 
 class TransactionDetailScreen extends StatefulWidget {
@@ -425,6 +426,6 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     if (amount >= 1000000) {
       return '${(amount / 1000000).toStringAsFixed(2)}M';
     }
-    return amount.toStringAsFixed(0);
+    return addThousandsSeparators(amount.toStringAsFixed(0));
   }
 }

@@ -7,6 +7,7 @@ import '../config.dart';
 import '../models/receipt.dart';
 import '../models/receipt_upload_task.dart';
 import '../services/receipt_upload_manager.dart';
+import '../utils/number_format.dart';
 import '../widgets/shimmer_placeholder.dart';
 import 'receipt_upload_screen.dart';
 
@@ -406,9 +407,10 @@ class _PendingReceiptCard extends StatelessWidget {
         : 'Unknown merchant';
     final currency = txns.isNotEmpty ? txns.first.currency : '';
     final total = txns.fold<double>(0, (sum, t) => sum + t.amount);
+    final formattedTotal = addThousandsSeparators(total.toStringAsFixed(0));
     final subtitle = txns.length == 1
-        ? '1 transaction · $currency ${total.toStringAsFixed(0)}'
-        : '${txns.length} transactions · $currency ${total.toStringAsFixed(0)}';
+        ? '1 transaction · $currency $formattedTotal'
+        : '${txns.length} transactions · $currency $formattedTotal';
 
     return InkWell(
       onTap: onTap,

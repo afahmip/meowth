@@ -5,6 +5,7 @@ import '../config.dart';
 import '../models/category.dart';
 import '../models/summary.dart';
 import '../models/transaction.dart';
+import '../utils/number_format.dart';
 import '../widgets/shimmer_placeholder.dart';
 import '../widgets/storage_percentage_bar.dart';
 import '../widgets/transaction_card.dart';
@@ -122,7 +123,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
     if (amount >= 1000000) {
       return '${(amount / 1000000).toStringAsFixed(2)}M';
     }
-    return amount.toStringAsFixed(0);
+    return addThousandsSeparators(amount.toStringAsFixed(0));
   }
 
   Future<void> _load() async {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/category.dart';
 import '../models/transaction.dart';
 import '../utils/drive_image.dart';
+import '../utils/number_format.dart';
 import 'shimmer_placeholder.dart';
 
 class TransactionCard extends StatelessWidget {
@@ -224,7 +225,7 @@ class TransactionCard extends StatelessWidget {
     } else if (amount >= 1000) {
       return '${(amount / 1000).toStringAsFixed(0)}K';
     }
-    return amount.toStringAsFixed(0);
+    return addThousandsSeparators(amount.toStringAsFixed(0));
   }
 }
 
