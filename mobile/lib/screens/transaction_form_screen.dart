@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import '../api/category_api.dart';
 import '../api/payment_method_api.dart';
@@ -30,6 +31,57 @@ class _FormItem {
     amountCtrl.dispose();
     qtyCtrl.dispose();
   }
+}
+
+// Auto-inserts thousands separators as digits are typed (e.g. typing
+// "1000000" on the numeric keypad shows "1,000,000") so entering a large
+// amount with commas doesn't depend on the keypad having a comma key.
+// _parseAmount strips them back out before the value is used.
+class _ThousandsSeparatorInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (newValue.text.isEmpty) return newValue;
+
+    final digitsAndDot = newValue.text.replaceAll(RegExp(r'[^0-9.]'), '');
+    final dotIndex = digitsAndDot.indexOf('.');
+    final intPart = dotIndex == -1 ? digitsAndDot : digitsAndDot.substring(0, dotIndex);
+    final decPart =
+        dotIndex == -1 ? null : digitsAndDot.substring(dotIndex + 1).replaceAll('.', '');
+
+    final formatted = decPart == null ? addCommas(intPart) : '${addCommas(intPart)}.$decPart';
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+
+  static String addCommas(String digits) {
+    if (digits.length <= 3) return digits;
+    final offset = digits.length % 3;
+    final buffer = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i != 0 && (i - offset) % 3 == 0) buffer.write(',');
+      buffer.write(digits[i]);
+    }
+    return buffer.toString();
+  }
+}
+
+// Mirrors _ThousandsSeparatorInputFormatter's grouping for an amount that's
+// already known (e.g. loading an existing transaction into the edit form),
+// and keeps the real fractional value intact — whole amounts show with no
+// decimals, fractional ones keep two, so an amount like 15.75 isn't
+// rounded away just because it's being displayed.
+String _initialAmountText(double amount) {
+  final isWhole = amount == amount.roundToDouble();
+  final raw = isWhole ? amount.toStringAsFixed(0) : amount.toStringAsFixed(2);
+  final dotIndex = raw.indexOf('.');
+  if (dotIndex == -1) return _ThousandsSeparatorInputFormatter.addCommas(raw);
+  final intPart = _ThousandsSeparatorInputFormatter.addCommas(raw.substring(0, dotIndex));
+  return '$intPart${raw.substring(dotIndex)}';
 }
 
 class TransactionFormScreen extends StatefulWidget {
@@ -86,7 +138,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
     _receiptApi = ReceiptApi(AppConfig.baseUrl);
     _merchantCtrl = TextEditingController(text: t?.merchant ?? '');
     _amountCtrl = TextEditingController(
-        text: t != null ? t.amount.toStringAsFixed(0) : '');
+        text: t != null ? _initialAmountText(t.amount) : '');
     _currency = (t?.currency ?? 'IDR').toUpperCase();
     _type = t?.type ?? 'expense';
     _spendingType = t?.spendingType ?? 'one_time';
@@ -279,7 +331,8 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
                       _textField(
                         controller: _amountCtrl,
                         hint: '0',
-                        keyboardType: TextInputType.number,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: [_ThousandsSeparatorInputFormatter()],
                         validator: (v) {
                           if (v == null || v.isEmpty) return 'Required';
                           if (_parseAmount(v) == null) return 'Invalid';
@@ -635,11 +688,13 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
     required TextEditingController controller,
     String? hint,
     TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator,
   }) =>
       TextFormField(
         controller: controller,
         keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
         validator: validator,
         style: const TextStyle(fontSize: 15, color: Color(0xFF111827)),
         decoration: InputDecoration(
