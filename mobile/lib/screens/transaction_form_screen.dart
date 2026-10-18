@@ -52,7 +52,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
   bool _uploadingReceipt = false;
   late final TextEditingController _merchantCtrl;
   late final TextEditingController _amountCtrl;
-  late final TextEditingController _currencyCtrl;
+  late String _currency;
   late String _type;
   late String _spendingType;
   late int _importanceLevel;
@@ -83,7 +83,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
     _merchantCtrl = TextEditingController(text: t?.merchant ?? '');
     _amountCtrl = TextEditingController(
         text: t != null ? t.amount.toStringAsFixed(0) : '');
-    _currencyCtrl = TextEditingController(text: t?.currency ?? 'IDR');
+    _currency = (t?.currency ?? 'IDR').toUpperCase();
     _type = t?.type ?? 'expense';
     _spendingType = t?.spendingType ?? 'one_time';
     _importanceLevel = t?.importanceLevel ?? 3;
@@ -101,7 +101,6 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
   void dispose() {
     _merchantCtrl.dispose();
     _amountCtrl.dispose();
-    _currencyCtrl.dispose();
     for (final item in _items) {
       item.dispose();
     }
@@ -136,7 +135,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
           TransactionInput(
             merchant: _merchantCtrl.text.trim(),
             amount: double.parse(_amountCtrl.text.trim()),
-            currency: _currencyCtrl.text.trim().toUpperCase(),
+            currency: _currency,
             type: _type,
             spendingType: _spendingType,
             importanceLevel: _importanceLevel,
@@ -168,7 +167,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
         await widget.api.create(TransactionInput(
           merchant: _merchantCtrl.text.trim(),
           amount: double.parse(_amountCtrl.text.trim()),
-          currency: _currencyCtrl.text.trim().toUpperCase(),
+          currency: _currency,
           type: _type,
           spendingType: _spendingType,
           importanceLevel: _importanceLevel,
@@ -293,10 +292,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
                     children: [
                       _label('Currency'),
                       const SizedBox(height: 8),
-                      _textField(
-                        controller: _currencyCtrl,
-                        hint: 'IDR',
-                      ),
+                      _currencyDropdown(),
                     ],
                   ),
                 ),
@@ -506,6 +502,28 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
         for (final c in _categories) DropdownMenuItem(value: c.id, child: Text(c.label)),
       ],
       onChanged: (v) => setState(() => _categoryId = v),
+      decoration: _fieldDecoration(),
+    );
+  }
+
+  static const _currencyOptions = ['AED', 'IDR'];
+
+  Widget _currencyDropdown() {
+    // Keeps whatever currency an existing transaction already has as a
+    // selectable option even if it's outside the usual AED/IDR pair (e.g.
+    // one saved from a scanned receipt in another currency) — otherwise
+    // saving the form without touching this field would silently coerce it
+    // to the dropdown's default instead of preserving it.
+    final options = _currencyOptions.contains(_currency)
+        ? _currencyOptions
+        : [..._currencyOptions, _currency];
+    return DropdownButtonFormField<String>(
+      value: _currency,
+      isExpanded: true,
+      items: [
+        for (final c in options) DropdownMenuItem(value: c, child: Text(c)),
+      ],
+      onChanged: (v) => setState(() => _currency = v!),
       decoration: _fieldDecoration(),
     );
   }
