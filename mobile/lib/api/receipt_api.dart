@@ -47,4 +47,11 @@ class ReceiptApi {
     final data = jsonDecode(res.body) as List;
     return data.map((e) => ReceiptListItem.fromJson(e)).toList();
   }
+
+  Future<void> discard(int id) async {
+    final res = await http.delete(Uri.parse('$baseUrl/receipts/$id'));
+    if (res.statusCode != 204) {
+      throw Exception(res.body.isNotEmpty ? res.body.trim() : 'Failed to discard receipt');
+    }
+  }
 }

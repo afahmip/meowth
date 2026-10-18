@@ -178,12 +178,44 @@ class _PendingReceiptsScreenState extends State<PendingReceiptsScreen> {
                     );
                     if (result == true) _load();
                   },
+                  onDiscard: () => _discard(item),
                 ),
             ],
           ),
         );
       },
     );
+  }
+
+  Future<void> _discard(ReceiptListItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Discard Receipt'),
+        content: const Text('Discard this receipt? It will no longer appear in your pending list.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFDC2626)),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await _api.discard(item.id);
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
   }
 
   Widget _buildError() {
@@ -362,8 +394,9 @@ class _UploadProgressCard extends StatelessWidget {
 class _PendingReceiptCard extends StatelessWidget {
   final ReceiptListItem item;
   final VoidCallback onTap;
+  final VoidCallback onDiscard;
 
-  const _PendingReceiptCard({required this.item, required this.onTap});
+  const _PendingReceiptCard({required this.item, required this.onTap, required this.onDiscard});
 
   @override
   Widget build(BuildContext context) {
@@ -415,7 +448,11 @@ class _PendingReceiptCard extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, color: Color(0xFF9CA3AF)),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Color(0xFF9CA3AF)),
+              onPressed: onDiscard,
+              visualDensity: VisualDensity.compact,
+            ),
           ],
         ),
       ),

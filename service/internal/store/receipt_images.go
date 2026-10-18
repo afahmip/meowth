@@ -39,7 +39,7 @@ func (s *ReceiptImageStore) UpdateDriveURL(ctx context.Context, id int64, driveU
 func (s *ReceiptImageStore) List(ctx context.Context) ([]model.AnalyzedReceiptImage, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, filename, claude_response, drive_url, transaction_id, created_at
-		 FROM analyzed_receipt_images ORDER BY created_at DESC`,
+		 FROM analyzed_receipt_images WHERE deleted_at IS NULL ORDER BY created_at DESC`,
 	)
 	if err != nil {
 		return nil, err
@@ -66,4 +66,19 @@ func (s *ReceiptImageStore) AssignTransaction(ctx context.Context, id, transacti
 		transactionID, id,
 	)
 	return err
+}
+
+// Delete soft-deletes a pending (not-yet-saved) receipt image: the row is
+// kept and marked deleted_at instead of removed, matching how transactions
+// and categories are discarded elsewhere.
+func (s *ReceiptImageStore) Delete(ctx context.Context, id int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE analyzed_receipt_images SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL`,
+		id,
+	)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
 }

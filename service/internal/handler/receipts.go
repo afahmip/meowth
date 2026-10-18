@@ -183,6 +183,20 @@ func (h *ReceiptHandler) AssignTransaction(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *ReceiptHandler) Discard(w http.ResponseWriter, r *http.Request) {
+	found, err := h.store.Delete(r.Context(), mustParseID(r.PathValue("id")))
+	if err != nil {
+		log.Printf("discard receipt image error: %v", err)
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // claudeErrorMessage turns a Claude API error into a message that's safe and
 // useful to show a client, instead of a bare 500 with no indication of cause
 // (e.g. missing API key vs. rate limiting vs. an oversized/unreadable image).

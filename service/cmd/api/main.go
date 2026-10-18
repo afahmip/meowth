@@ -81,6 +81,7 @@ func main() {
 		"request timed out",
 	).ServeHTTP)
 	mux.HandleFunc("PATCH /receipts/{id}/transaction", receiptHandler.AssignTransaction)
+	mux.HandleFunc("DELETE /receipts/{id}", receiptHandler.Discard)
 	mux.HandleFunc("POST /receipts/jobs", receiptHandler.CreateJob)
 	mux.HandleFunc("GET /receipts/jobs", receiptHandler.ListJobs)
 	mux.HandleFunc("POST /receipts/jobs/{id}/retry", receiptHandler.RetryJob)
