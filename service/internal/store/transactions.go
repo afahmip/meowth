@@ -143,8 +143,11 @@ func (s *TransactionStore) attachItems(ctx context.Context, txns []model.Transac
 }
 
 // attachReceiptImages links each transaction back to the photo it was
-// scanned from, if any (analyzed_receipt_images.transaction_id is only set
-// once a scanned receipt's drafts are saved — see ReceiptImageStore).
+// scanned from, if any (a row in receipt_image_transactions is only added
+// once a scanned receipt's drafts are saved — see ReceiptImageStore). A
+// single receipt image can be linked to more than one transaction (e.g. an
+// Amazon order-history screenshot split into separate orders), so this is a
+// many-to-one lookup from each transaction's side.
 func (s *TransactionStore) attachReceiptImages(ctx context.Context, txns []model.Transaction) error {
 	ids := make([]string, len(txns))
 	for i, t := range txns {
@@ -152,8 +155,10 @@ func (s *TransactionStore) attachReceiptImages(ctx context.Context, txns []model
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT transaction_id, drive_url FROM analyzed_receipt_images
-		WHERE transaction_id IN (`+strings.Join(ids, ",")+`) AND drive_url IS NOT NULL
+		SELECT rit.transaction_id, ari.drive_url
+		FROM receipt_image_transactions rit
+		JOIN analyzed_receipt_images ari ON ari.id = rit.receipt_image_id
+		WHERE rit.transaction_id IN (`+strings.Join(ids, ",")+`) AND ari.drive_url IS NOT NULL
 	`)
 	if err != nil {
 		return err

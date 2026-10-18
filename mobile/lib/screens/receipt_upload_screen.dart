@@ -162,11 +162,12 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
   Future<void> _saveAll() async {
     if (_drafts.isEmpty) return;
     setState(() => _saving = true);
-    int? firstCreatedId;
     try {
       // Drop each draft from the list as soon as it's saved, so a retry
       // after a failure only resubmits what's left instead of duplicating
-      // transactions that were already created.
+      // transactions that were already created. A receipt can be split into
+      // several drafts (e.g. an order-history screenshot), so every one of
+      // them gets linked back to the same receipt image, not just the first.
       while (_drafts.isNotEmpty) {
         final d = _drafts.first;
         final id = await _txnApi.create(TransactionInput(
@@ -188,19 +189,18 @@ class _ReceiptUploadScreenState extends State<ReceiptUploadScreen> {
                   ))
               .toList(),
         ));
-        firstCreatedId ??= id;
+        if (_receiptId != null) {
+          try {
+            await _receiptApi.assignTransaction(_receiptId!, id);
+          } catch (_) {
+            // Best-effort: the transaction is already saved, so don't block
+            // on failing to link it back to the receipt image.
+          }
+        }
         setState(() {
           _drafts.removeAt(0);
           _draftKeys.removeAt(0);
         });
-      }
-      if (_receiptId != null && firstCreatedId != null) {
-        try {
-          await _receiptApi.assignTransaction(_receiptId!, firstCreatedId);
-        } catch (_) {
-          // Best-effort: the transactions are already saved, so don't block
-          // on failing to link them back to the receipt image.
-        }
       }
       if (mounted) Navigator.pop(context, true);
     } catch (e) {

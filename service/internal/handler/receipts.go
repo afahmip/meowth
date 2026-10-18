@@ -294,7 +294,10 @@ func analyzeImageWithClaude(ctx context.Context, imageBytes []byte, mediaType st
 		)
 	}
 
-	prompt := fmt.Sprintf(`Analyze this receipt image and extract all transactions visible.
+	prompt := fmt.Sprintf(`Analyze this image and extract all transactions visible. The image may be a
+single receipt, or it may be something like an order-history list or a
+statement screenshot that covers several separate purchases — decide which
+one this is before extracting.
 
 Return ONLY a JSON array with this exact structure (no markdown, no explanation):
 [
@@ -315,8 +318,16 @@ Return ONLY a JSON array with this exact structure (no markdown, no explanation)
 ]
 
 Rules:
-- Return one object per transaction found in the image
-- If the image shows a single receipt, return an array with one object
+- Return one object per distinct transaction, not one per line item: a single
+  receipt from one checkout is one transaction even if it lists many
+  products — list those products under "items" instead
+- Treat it as multiple transactions only when the image shows several
+  independent purchases or charges, each with its own merchant/order and
+  date — e.g. an Amazon order-history screenshot listing several orders, a
+  bank or card statement listing several charges, or a photo containing more
+  than one separate physical receipt. Return one object per such purchase,
+  using that purchase's own line items (if shown) under "items"
+- If the image shows just one receipt, return an array with a single object
 - amount is the total amount paid per transaction
 - currency should be inferred from symbols or context (default to USD if unknown)
 - transaction_date should be the date on the receipt (default to today if not found)

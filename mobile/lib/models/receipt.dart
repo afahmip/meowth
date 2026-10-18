@@ -90,14 +90,16 @@ class ReceiptJobStatus {
       );
 }
 
-// A previously-analyzed receipt as returned by GET /receipts. transactionId
-// is null until the drafts are reviewed and saved, which is what makes a
-// receipt show up as "pending" / not-yet-saved.
+// A previously-analyzed receipt as returned by GET /receipts. transactionIds
+// is empty until the drafts are reviewed and saved, which is what makes a
+// receipt show up as "pending" / not-yet-saved. A receipt can end up linked
+// to more than one transaction — e.g. an order-history screenshot that got
+// split into several separate purchases.
 class ReceiptListItem {
   final int id;
   final String filename;
   final String? driveUrl;
-  final int? transactionId;
+  final List<int> transactionIds;
   final List<ReceiptTransactionDraft> transactions;
   final String createdAt;
 
@@ -105,18 +107,20 @@ class ReceiptListItem {
     required this.id,
     required this.filename,
     this.driveUrl,
-    this.transactionId,
+    this.transactionIds = const [],
     this.transactions = const [],
     required this.createdAt,
   });
 
-  bool get isSaved => transactionId != null;
+  bool get isSaved => transactionIds.isNotEmpty;
 
   factory ReceiptListItem.fromJson(Map<String, dynamic> j) => ReceiptListItem(
         id: j['id'],
         filename: j['filename'] ?? '',
         driveUrl: j['drive_url'],
-        transactionId: j['transaction_id'],
+        transactionIds: (j['transaction_ids'] as List? ?? [])
+            .map((e) => e as int)
+            .toList(),
         transactions: (j['transactions'] as List? ?? [])
             .map((e) => ReceiptTransactionDraft.fromJson(e))
             .toList(),

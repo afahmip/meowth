@@ -1,12 +1,15 @@
 package model
 
+// TransactionIDs can hold more than one entry: a single receipt image (e.g.
+// an Amazon order-history screenshot) may be split into several separate
+// transactions, each linked back to the same image.
 type AnalyzedReceiptImage struct {
-	ID            int64                `json:"id"`
-	Filename      string               `json:"filename"`
-	DriveURL      *string              `json:"drive_url,omitempty"`
-	TransactionID *int64               `json:"transaction_id,omitempty"`
-	Transactions  []ReceiptTransaction `json:"transactions,omitempty"`
-	CreatedAt     string               `json:"created_at"`
+	ID             int64                `json:"id"`
+	Filename       string               `json:"filename"`
+	DriveURL       *string              `json:"drive_url,omitempty"`
+	TransactionIDs []int64              `json:"transaction_ids"`
+	Transactions   []ReceiptTransaction `json:"transactions,omitempty"`
+	CreatedAt      string               `json:"created_at"`
 }
 
 type AnalyzedReceiptEmail struct {
