@@ -110,6 +110,21 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
   String _categoryKey(int? categoryId) => categoryId?.toString() ?? 'none';
 
+  // A category or period can mix currencies (e.g. a mostly-IDR month with
+  // one USD purchase), so each one gets its own "CUR amount" chunk rather
+  // than being summed together.
+  String _formatAmounts(List<CurrencyAmount> amounts) {
+    if (amounts.isEmpty) return '0';
+    return amounts.map((a) => '${a.currency} ${_formatAmount(a.total)}').join(' + ');
+  }
+
+  String _formatAmount(double amount) {
+    if (amount >= 1000000) {
+      return '${(amount / 1000000).toStringAsFixed(2)}M';
+    }
+    return amount.toStringAsFixed(0);
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -285,6 +300,15 @@ class _SummaryScreenState extends State<SummaryScreen> {
       summary.categories.length,
       (i) => _palette[i % _palette.length],
     );
+    CategorySummary? selected;
+    if (_selectedCategoryKey != null) {
+      for (final c in summary.categories) {
+        if (_categoryKey(c.categoryId) == _selectedCategoryKey) {
+          selected = c;
+          break;
+        }
+      }
+    }
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -317,19 +341,38 @@ class _SummaryScreenState extends State<SummaryScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (selected != null) ...[
+                  Text(
+                    selected.label,
+                    style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                  ),
+                  const SizedBox(height: 2),
+                ],
                 Text(
-                  '${summary.categories.isEmpty ? 0 : summary.total.toStringAsFixed(0)} spent',
+                  summary.categories.isEmpty
+                      ? '0 spent'
+                      : '${_formatAmounts(selected?.amounts ?? summary.totals)} spent',
                   style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFF111827),
                   ),
                 ),
+                if (selected != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '${selected.percentage.toStringAsFixed(0)}% of ${_formatAmounts(summary.totals)} total',
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 StoragePercentageBar(
                   categories: summary.categories,
                   colors: colors,
                   selectedCategoryKey: _selectedCategoryKey,
+                  onSelect: (key) => setState(() {
+                    _selectedCategoryKey = _selectedCategoryKey == key ? null : key;
+                  }),
                 ),
                 const SizedBox(height: 14),
                 if (summary.categories.isEmpty)

@@ -59,12 +59,24 @@ type TransactionPage struct {
 	HasMore bool          `json:"has_more"`
 }
 
+// CurrencyAmount is one currency's share of a blended total — transactions
+// in a period aren't necessarily all in the same currency, so a plain sum
+// across them would be meaningless.
+type CurrencyAmount struct {
+	Currency string  `json:"currency"`
+	Total    float64 `json:"total"`
+}
+
+// Total and Percentage stay blended across currencies (summing mismatched
+// currencies as if they were equal) purely to size the category bar on the
+// summary screen; Amounts carries the real breakdown for display.
 type CategorySummary struct {
-	CategoryID    *int64  `json:"category_id"`
-	CategoryName  string  `json:"category_name"`
-	CategoryEmoji string  `json:"category_emoji"`
-	Total         float64 `json:"total"`
-	Percentage    float64 `json:"percentage"`
+	CategoryID    *int64           `json:"category_id"`
+	CategoryName  string           `json:"category_name"`
+	CategoryEmoji string           `json:"category_emoji"`
+	Total         float64          `json:"total"`
+	Percentage    float64          `json:"percentage"`
+	Amounts       []CurrencyAmount `json:"amounts"`
 }
 
 type TransactionSummary struct {
@@ -72,5 +84,6 @@ type TransactionSummary struct {
 	To         string            `json:"to"`
 	Mode       string            `json:"mode"`
 	Total      float64           `json:"total"`
+	Totals     []CurrencyAmount  `json:"totals"`
 	Categories []CategorySummary `json:"categories"`
 }

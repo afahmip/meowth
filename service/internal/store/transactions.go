@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -392,24 +393,29 @@ const (
 	SummaryModeItems        = "items"
 )
 
+// Summary groups by (category, currency) rather than category alone, since
+// a category's transactions aren't necessarily all in the same currency —
+// summing mismatched currencies together would produce a meaningless
+// number. Rows are merged back into one CategorySummary per category below,
+// with Total/Percentage staying a blended (cross-currency) figure used only
+// to size the summary screen's bar, and Amounts carrying the real
+// per-currency breakdown.
 func (s *TransactionStore) Summary(ctx context.Context, from, to, mode string) (model.TransactionSummary, error) {
 	query := `
-		SELECT t.category_id, COALESCE(c.name, 'Uncategorized'), COALESCE(c.emoji, ''), SUM(t.amount)
+		SELECT t.category_id, COALESCE(c.name, 'Uncategorized'), COALESCE(c.emoji, ''), t.currency, SUM(t.amount)
 		FROM transactions t
 		LEFT JOIN categories c ON c.id = t.category_id AND c.deleted_at IS NULL
 		WHERE t.type = 'expense' AND t.deleted_at IS NULL AND t.transaction_date >= ? AND t.transaction_date <= ?
-		GROUP BY t.category_id
-		ORDER BY SUM(t.amount) DESC
+		GROUP BY t.category_id, t.currency
 	`
 	if mode == SummaryModeItems {
 		query = `
-			SELECT ti.category_id, COALESCE(c.name, 'Uncategorized'), COALESCE(c.emoji, ''), SUM(ti.amount)
+			SELECT ti.category_id, COALESCE(c.name, 'Uncategorized'), COALESCE(c.emoji, ''), t.currency, SUM(ti.amount)
 			FROM transaction_items ti
 			JOIN transactions t ON t.id = ti.transaction_id
 			LEFT JOIN categories c ON c.id = ti.category_id AND c.deleted_at IS NULL
 			WHERE t.type = 'expense' AND t.deleted_at IS NULL AND ti.deleted_at IS NULL AND t.transaction_date >= ? AND t.transaction_date <= ?
-			GROUP BY ti.category_id
-			ORDER BY SUM(ti.amount) DESC
+			GROUP BY ti.category_id, t.currency
 		`
 	} else {
 		mode = SummaryModeTransactions
@@ -421,15 +427,46 @@ func (s *TransactionStore) Summary(ctx context.Context, from, to, mode string) (
 	}
 	defer rows.Close()
 
-	summary := model.TransactionSummary{From: from, To: to, Mode: mode, Categories: []model.CategorySummary{}}
+	order := []string{}
+	byCategory := map[string]*model.CategorySummary{}
+	currencyTotals := map[string]float64{}
+
 	for rows.Next() {
-		var cs model.CategorySummary
-		if err := rows.Scan(&cs.CategoryID, &cs.CategoryName, &cs.CategoryEmoji, &cs.Total); err != nil {
+		var categoryID *int64
+		var name, emoji, currency string
+		var amount float64
+		if err := rows.Scan(&categoryID, &name, &emoji, &currency, &amount); err != nil {
 			return model.TransactionSummary{}, err
 		}
+
+		key := categoryKey(categoryID)
+		cs, ok := byCategory[key]
+		if !ok {
+			cs = &model.CategorySummary{CategoryID: categoryID, CategoryName: name, CategoryEmoji: emoji}
+			byCategory[key] = cs
+			order = append(order, key)
+		}
+		cs.Total += amount
+		cs.Amounts = append(cs.Amounts, model.CurrencyAmount{Currency: currency, Total: amount})
+		currencyTotals[currency] += amount
+	}
+
+	summary := model.TransactionSummary{From: from, To: to, Mode: mode, Categories: []model.CategorySummary{}}
+	for _, key := range order {
+		cs := *byCategory[key]
 		summary.Categories = append(summary.Categories, cs)
 		summary.Total += cs.Total
 	}
+	sort.Slice(summary.Categories, func(i, j int) bool {
+		return summary.Categories[i].Total > summary.Categories[j].Total
+	})
+
+	for currency, total := range currencyTotals {
+		summary.Totals = append(summary.Totals, model.CurrencyAmount{Currency: currency, Total: total})
+	}
+	sort.Slice(summary.Totals, func(i, j int) bool {
+		return summary.Totals[i].Total > summary.Totals[j].Total
+	})
 
 	if summary.Total > 0 {
 		for i := range summary.Categories {
@@ -438,6 +475,13 @@ func (s *TransactionStore) Summary(ctx context.Context, from, to, mode string) (
 	}
 
 	return summary, nil
+}
+
+func categoryKey(id *int64) string {
+	if id == nil {
+		return "none"
+	}
+	return intStr(*id)
 }
 
 func intStr(n int64) string {
