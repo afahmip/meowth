@@ -231,7 +231,10 @@ func fetchAndAnalyzeEmail(ctx context.Context, svc *gmail.Service, msgID string)
 func analyzeEmailWithClaude(ctx context.Context, subject, body string) (string, error) {
 	client := anthropic.NewClient()
 
+	today := time.Now().Format("2006-01-02")
 	prompt := fmt.Sprintf(`Analyze this receipt email and extract the transaction details.
+
+Today's date is %s.
 
 Subject: %s
 
@@ -256,12 +259,12 @@ Return ONLY a JSON object with this exact structure (no markdown, no explanation
 Rules:
 - amount is the total amount paid
 - currency should be inferred from symbols or context (default to USD if unknown)
-- transaction_date should be the date on the receipt/email (default to today if not found)
+- transaction_date should be the date on the receipt/email (default to today if not found). If the year isn't shown or is otherwise unclear, use today's year rather than guessing an older one
 - items should list individual line items if visible; omit if none
 - item quantity is the number of units of that item purchased, if shown (e.g. "2x", "3 @ $1.00"); default it to 1 if no quantity is indicated
 - type is always "expense" for receipts
 - spending_type is "living_cost" for recurring baseline expenses (groceries/staples, utilities, rent, subscriptions, insurance, routine commute), or "one_time" for discretionary/one-off purchases (dining out, entertainment, gadgets, gifts, ad-hoc shopping, travel); default to "one_time" if unclear
-- importance_level is an integer 1-5 rating how essential the spend is: 5 for essential/unavoidable (groceries, utilities, medical, debt payments), 3 for routine/moderate spend, 1 for fully discretionary spend (entertainment, impulse purchases); default to 3 if unclear`, subject, body)
+- importance_level is an integer 1-5 rating how essential the spend is: 5 for essential/unavoidable (groceries, utilities, medical, debt payments), 3 for routine/moderate spend, 1 for fully discretionary spend (entertainment, impulse purchases); default to 3 if unclear`, today, subject, body)
 
 	msg, err := client.Messages.New(ctx, anthropic.MessageNewParams{
 		Model:     claudeModel,

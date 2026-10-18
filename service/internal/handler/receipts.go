@@ -294,10 +294,13 @@ func analyzeImageWithClaude(ctx context.Context, imageBytes []byte, mediaType st
 		)
 	}
 
+	today := time.Now().Format("2006-01-02")
 	prompt := fmt.Sprintf(`Analyze this image and extract all transactions visible. The image may be a
 single receipt, or it may be something like an order-history list or a
 statement screenshot that covers several separate purchases — decide which
 one this is before extracting.
+
+Today's date is %s.
 
 Return ONLY a JSON array with this exact structure (no markdown, no explanation):
 [
@@ -330,14 +333,14 @@ Rules:
 - If the image shows just one receipt, return an array with a single object
 - amount is the total amount paid per transaction
 - currency should be inferred from symbols or context (default to USD if unknown)
-- transaction_date should be the date on the receipt (default to today if not found)
+- transaction_date should be the date on the receipt (default to today if not found). If the year isn't shown or is otherwise unclear, use today's year rather than guessing an older one
 - items should list individual line items if visible; omit the items field if none are visible
 - item quantity is the number of units of that item purchased, if shown on the receipt (e.g. "2x", "3 @ $1.00"); default it to 1 if no quantity is indicated
 - type is always "expense" for receipts
 - category_id must be one of the given ids (as a JSON number), or null — never invent an id or return a category name
 - spending_type is "living_cost" for recurring baseline expenses (groceries/staples, utilities, rent, subscriptions, insurance, routine commute), or "one_time" for discretionary/one-off purchases (dining out, entertainment, gadgets, gifts, ad-hoc shopping, travel); default to "one_time" if unclear
 - importance_level is an integer 1-5 rating how essential the spend is: 5 for essential/unavoidable (groceries, utilities, medical, debt payments), 3 for routine/moderate spend, 1 for fully discretionary spend (entertainment, impulse purchases); default to 3 if unclear
-- %s`, categoryInstruction)
+- %s`, today, categoryInstruction)
 
 	msg, err := client.Messages.New(ctx, anthropic.MessageNewParams{
 		Model:     claudeModel,
