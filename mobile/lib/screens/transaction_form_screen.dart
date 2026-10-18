@@ -67,6 +67,10 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
 
   bool get _isEdit => widget.transaction != null;
 
+  // Lets an amount be typed with thousands separators (e.g. "1,000,000")
+  // without tripping up double.parse, which doesn't understand commas.
+  double? _parseAmount(String v) => double.tryParse(v.trim().replaceAll(',', ''));
+
   @override
   void initState() {
     super.initState();
@@ -134,7 +138,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
           txnId,
           TransactionInput(
             merchant: _merchantCtrl.text.trim(),
-            amount: double.parse(_amountCtrl.text.trim()),
+            amount: _parseAmount(_amountCtrl.text.trim())!,
             currency: _currency,
             type: _type,
             spendingType: _spendingType,
@@ -153,7 +157,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
         for (final item in liveItems) {
           final input = TransactionItemInput(
             description: item.descCtrl.text.trim(),
-            amount: double.tryParse(item.amountCtrl.text.trim()) ?? 0,
+            amount: _parseAmount(item.amountCtrl.text.trim()) ?? 0,
             quantity: int.tryParse(item.qtyCtrl.text.trim()) ?? 1,
           );
           if (item.id != null) {
@@ -166,7 +170,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
       } else {
         await widget.api.create(TransactionInput(
           merchant: _merchantCtrl.text.trim(),
-          amount: double.parse(_amountCtrl.text.trim()),
+          amount: _parseAmount(_amountCtrl.text.trim())!,
           currency: _currency,
           type: _type,
           spendingType: _spendingType,
@@ -177,7 +181,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
           items: liveItems
               .map((item) => TransactionItemInput(
                     description: item.descCtrl.text.trim(),
-                    amount: double.tryParse(item.amountCtrl.text.trim()) ?? 0,
+                    amount: _parseAmount(item.amountCtrl.text.trim()) ?? 0,
                     quantity: int.tryParse(item.qtyCtrl.text.trim()) ?? 1,
                   ))
               .toList(),
@@ -278,7 +282,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
                         keyboardType: TextInputType.number,
                         validator: (v) {
                           if (v == null || v.isEmpty) return 'Required';
-                          if (double.tryParse(v) == null) return 'Invalid';
+                          if (_parseAmount(v) == null) return 'Invalid';
                           return null;
                         },
                       ),
