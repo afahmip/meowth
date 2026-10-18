@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -181,6 +182,60 @@ func (h *ReceiptHandler) AssignTransaction(w http.ResponseWriter, r *http.Reques
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// UploadForTransaction attaches a receipt photo directly to an existing
+// transaction — unlike Analyze, it skips Claude extraction entirely since
+// the transaction's fields are already known (the user is editing them by
+// hand), so all it needs to do is store the image and upload it to Drive.
+func (h *ReceiptHandler) UploadForTransaction(w http.ResponseWriter, r *http.Request) {
+	txnID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "invalid transaction id", http.StatusBadRequest)
+		return
+	}
+
+	if err := r.ParseMultipartForm(20 << 20); err != nil {
+		http.Error(w, "failed to parse form", http.StatusBadRequest)
+		return
+	}
+	file, header, err := r.FormFile("image")
+	if err != nil {
+		http.Error(w, "image field required", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	imageBytes, err := io.ReadAll(file)
+	if err != nil {
+		http.Error(w, "failed to read image", http.StatusInternalServerError)
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	if ext == "" {
+		ext = ".jpg"
+	}
+	mediaType := extensionToMediaType(ext)
+	filename := generateFilename("", "", ext)
+
+	receiptID, err := h.store.Create(r.Context(), filename, "[]")
+	if err != nil {
+		log.Printf("db insert error: %v", err)
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	if err := h.store.AssignTransaction(r.Context(), receiptID, txnID); err != nil {
+		log.Printf("assign transaction error: %v", err)
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+
+	go h.uploadToDrive(receiptID, filename, imageBytes, mediaType)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]any{"id": receiptID})
 }
 
 func (h *ReceiptHandler) Discard(w http.ResponseWriter, r *http.Request) {

@@ -1,11 +1,15 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../api/category_api.dart';
 import '../api/payment_method_api.dart';
+import '../api/receipt_api.dart';
 import '../api/transaction_api.dart';
 import '../config.dart';
 import '../models/category.dart';
 import '../models/payment_method.dart';
 import '../models/transaction.dart';
+import '../utils/drive_image.dart';
 
 // A row in the items editor. `id` is null for a row the user just added
 // that doesn't exist on the server yet, which is how submit tells "add"
@@ -42,6 +46,10 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
   final _formKey = GlobalKey<FormState>();
   late final CategoryApi _categoryApi;
   late final PaymentMethodApi _paymentMethodApi;
+  late final ReceiptApi _receiptApi;
+  final _picker = ImagePicker();
+  File? _pickedReceiptImage;
+  bool _uploadingReceipt = false;
   late final TextEditingController _merchantCtrl;
   late final TextEditingController _amountCtrl;
   late final TextEditingController _currencyCtrl;
@@ -71,6 +79,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
     _paymentMethodApi.list().then((methods) {
       if (mounted) setState(() => _paymentMethods = methods);
     }).catchError((_) {});
+    _receiptApi = ReceiptApi(AppConfig.baseUrl);
     _merchantCtrl = TextEditingController(text: t?.merchant ?? '');
     _amountCtrl = TextEditingController(
         text: t != null ? t.amount.toStringAsFixed(0) : '');
@@ -195,6 +204,27 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
       lastDate: DateTime(2100),
     );
     if (picked != null) setState(() => _date = picked);
+  }
+
+  Future<void> _pickAndUploadReceipt(ImageSource source) async {
+    final picked = await _picker.pickImage(source: source, imageQuality: 85);
+    if (picked == null) return;
+    final file = File(picked.path);
+    setState(() {
+      _pickedReceiptImage = file;
+      _uploadingReceipt = true;
+    });
+    try {
+      await _receiptApi.uploadReceipt(widget.transaction!.id, file);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingReceipt = false);
+    }
   }
 
   @override
@@ -336,32 +366,130 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
             ),
             const SizedBox(height: 8),
             for (var i = 0; i < _items.length; i++) _itemRow(i),
-            const SizedBox(height: 32),
-            SizedBox(
-              height: 48,
-              child: ElevatedButton(
-                onPressed: _loading ? null : _submit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF111827),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  elevation: 0,
+            if (_isEdit) ...[
+              const SizedBox(height: 24),
+              _label('Receipt'),
+              const SizedBox(height: 8),
+              _receiptSection(),
+            ],
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+          ),
+          child: SizedBox(
+            height: 48,
+            child: ElevatedButton(
+              onPressed: _loading ? null : _submit,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF111827),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: _loading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
+                elevation: 0,
+              ),
+              child: _loading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : Text(_isEdit ? 'Save Changes' : 'Create Transaction'),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _receiptSection() {
+    final networkUrl = widget.transaction?.receiptImageUrl;
+    final networkSrc = networkUrl != null ? driveImageSrc(networkUrl) : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_pickedReceiptImage != null || networkSrc != null) ...[
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Stack(
+              children: [
+                _pickedReceiptImage != null
+                    ? Image.file(
+                        _pickedReceiptImage!,
+                        height: 160,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      )
+                    : Image.network(
+                        networkSrc!,
+                        height: 160,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                      ),
+                if (_uploadingReceipt)
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.black38,
+                      child: const Center(
                         child: CircularProgressIndicator(
                             strokeWidth: 2, color: Colors.white),
-                      )
-                    : Text(_isEdit ? 'Save Changes' : 'Create Transaction'),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _uploadingReceipt
+                    ? null
+                    : () => _pickAndUploadReceipt(ImageSource.camera),
+                icon: const Icon(Icons.camera_alt_outlined, size: 18),
+                label: const Text('Take Photo'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF111827),
+                  side: const BorderSide(color: Color(0xFFE5E7EB)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _uploadingReceipt
+                    ? null
+                    : () => _pickAndUploadReceipt(ImageSource.gallery),
+                icon: const Icon(Icons.photo_library_outlined, size: 18),
+                label: const Text('Gallery'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF111827),
+                  side: const BorderSide(color: Color(0xFFE5E7EB)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
               ),
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../models/receipt.dart';
 
@@ -46,6 +47,21 @@ class ReceiptApi {
     }
     final data = jsonDecode(res.body) as List;
     return data.map((e) => ReceiptListItem.fromJson(e)).toList();
+  }
+
+  // Attaches a photo directly to an already-saved transaction, skipping the
+  // scan-and-review flow entirely (the transaction's fields are already
+  // known, so there's nothing to extract or confirm).
+  Future<void> uploadReceipt(int transactionId, File image) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/transactions/$transactionId/receipt'),
+    )..files.add(await http.MultipartFile.fromPath('image', image.path));
+    final streamed = await request.send();
+    if (streamed.statusCode != 201) {
+      final body = await streamed.stream.bytesToString();
+      throw Exception(body.isNotEmpty ? body.trim() : 'Failed to upload receipt');
+    }
   }
 
   Future<void> discard(int id) async {

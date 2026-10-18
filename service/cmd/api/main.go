@@ -72,6 +72,7 @@ func main() {
 	mux.HandleFunc("POST /transactions/{id}/items", txnHandler.AddItems)
 	mux.HandleFunc("PATCH /transactions/{id}/items/{item_id}", txnHandler.UpdateItem)
 	mux.HandleFunc("DELETE /transactions/{id}/items/{item_id}", txnHandler.DeleteItem)
+	mux.HandleFunc("POST /transactions/{id}/receipt", receiptHandler.UploadForTransaction)
 
 	mux.HandleFunc("GET /receipts", receiptHandler.List)
 	mux.HandleFunc("GET /receipt-emails", receiptEmailHandler.List)
