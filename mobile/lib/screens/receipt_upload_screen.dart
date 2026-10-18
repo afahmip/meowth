@@ -11,6 +11,7 @@ import '../models/receipt.dart';
 import '../models/transaction.dart';
 import '../services/receipt_upload_manager.dart';
 import '../utils/drive_image.dart';
+import '../utils/number_format.dart';
 import 'pending_receipts_screen.dart';
 
 enum _Stage { picking, analyzing, reviewing }
@@ -520,7 +521,7 @@ class _DraftTransactionCardState extends State<_DraftTransactionCard> {
     super.initState();
     final d = widget.draft;
     _merchantCtrl = TextEditingController(text: d.merchant);
-    _amountCtrl = TextEditingController(text: d.amount.toStringAsFixed(2));
+    _amountCtrl = TextEditingController(text: formatAmountForInput(d.amount, alwaysShowDecimals: true));
     _currency = _normalizeCurrency(d.currency);
     _type = d.type;
     _categoryId = d.categoryId;
@@ -543,7 +544,7 @@ class _DraftTransactionCardState extends State<_DraftTransactionCard> {
   void _emit() {
     widget.onChanged(ReceiptTransactionDraft(
       merchant: _merchantCtrl.text.trim(),
-      amount: double.tryParse(_amountCtrl.text.trim()) ?? widget.draft.amount,
+      amount: parseAmount(_amountCtrl.text.trim()) ?? widget.draft.amount,
       currency: _currency,
       transactionDate: _date?.toIso8601String().substring(0, 10),
       type: _type,
@@ -637,6 +638,7 @@ class _DraftTransactionCardState extends State<_DraftTransactionCard> {
                   controller: _amountCtrl,
                   onChanged: (_) => _emit(),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [ThousandsSeparatorInputFormatter()],
                   decoration: _fieldDecoration('Amount'),
                 ),
               ),
@@ -830,7 +832,8 @@ class _ItemRowState extends State<_ItemRow> {
   void initState() {
     super.initState();
     _descCtrl = TextEditingController(text: widget.item.description);
-    _amountCtrl = TextEditingController(text: widget.item.amount.toStringAsFixed(2));
+    _amountCtrl = TextEditingController(
+        text: formatAmountForInput(widget.item.amount, alwaysShowDecimals: true));
     _quantityCtrl = TextEditingController(text: widget.item.quantity.toString());
     _categoryId = widget.item.categoryId;
   }
@@ -846,7 +849,7 @@ class _ItemRowState extends State<_ItemRow> {
   void _emit() {
     widget.onChanged(ReceiptItemDraft(
       description: _descCtrl.text.trim(),
-      amount: double.tryParse(_amountCtrl.text.trim()) ?? widget.item.amount,
+      amount: parseAmount(_amountCtrl.text.trim()) ?? widget.item.amount,
       quantity: int.tryParse(_quantityCtrl.text.trim()) ?? widget.item.quantity,
       categoryId: _categoryId,
     ));
@@ -917,6 +920,7 @@ class _ItemRowState extends State<_ItemRow> {
               onChanged: (_) => _emit(),
               textAlign: TextAlign.right,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [ThousandsSeparatorInputFormatter()],
               style: const TextStyle(fontSize: 13, color: Color(0xFF374151)),
               decoration: const InputDecoration(
                 isDense: true,

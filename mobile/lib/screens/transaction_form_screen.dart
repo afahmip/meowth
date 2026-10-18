@@ -24,7 +24,8 @@ class _FormItem {
 
   _FormItem({this.id, String description = '', double amount = 0, int quantity = 1})
       : descCtrl = TextEditingController(text: description),
-        amountCtrl = TextEditingController(text: amount == 0 ? '' : amount.toStringAsFixed(2)),
+        amountCtrl = TextEditingController(
+            text: amount == 0 ? '' : formatAmountForInput(amount, alwaysShowDecimals: true)),
         qtyCtrl = TextEditingController(text: quantity.toString());
 
   void dispose() {
@@ -32,48 +33,6 @@ class _FormItem {
     amountCtrl.dispose();
     qtyCtrl.dispose();
   }
-}
-
-// Auto-inserts thousands separators as digits are typed (e.g. typing
-// "1000000" on the numeric keypad shows "1,000,000") so entering a large
-// amount with commas doesn't depend on the keypad having a comma key.
-// _parseAmount strips them back out before the value is used.
-class _ThousandsSeparatorInputFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    if (newValue.text.isEmpty) return newValue;
-
-    final digitsAndDot = newValue.text.replaceAll(RegExp(r'[^0-9.]'), '');
-    final dotIndex = digitsAndDot.indexOf('.');
-    final intPart = dotIndex == -1 ? digitsAndDot : digitsAndDot.substring(0, dotIndex);
-    final decPart =
-        dotIndex == -1 ? null : digitsAndDot.substring(dotIndex + 1).replaceAll('.', '');
-
-    final formatted = decPart == null
-        ? addThousandsSeparators(intPart)
-        : '${addThousandsSeparators(intPart)}.$decPart';
-    return TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
-    );
-  }
-}
-
-// Mirrors _ThousandsSeparatorInputFormatter's grouping for an amount that's
-// already known (e.g. loading an existing transaction into the edit form),
-// and keeps the real fractional value intact — whole amounts show with no
-// decimals, fractional ones keep two, so an amount like 15.75 isn't
-// rounded away just because it's being displayed.
-String _initialAmountText(double amount) {
-  final isWhole = amount == amount.roundToDouble();
-  final raw = isWhole ? amount.toStringAsFixed(0) : amount.toStringAsFixed(2);
-  final dotIndex = raw.indexOf('.');
-  if (dotIndex == -1) return addThousandsSeparators(raw);
-  final intPart = addThousandsSeparators(raw.substring(0, dotIndex));
-  return '$intPart${raw.substring(dotIndex)}';
 }
 
 class TransactionFormScreen extends StatefulWidget {
@@ -111,10 +70,6 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
 
   bool get _isEdit => widget.transaction != null;
 
-  // Lets an amount be typed with thousands separators (e.g. "1,000,000")
-  // without tripping up double.parse, which doesn't understand commas.
-  double? _parseAmount(String v) => double.tryParse(v.trim().replaceAll(',', ''));
-
   @override
   void initState() {
     super.initState();
@@ -130,7 +85,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
     _receiptApi = ReceiptApi(AppConfig.baseUrl);
     _merchantCtrl = TextEditingController(text: t?.merchant ?? '');
     _amountCtrl = TextEditingController(
-        text: t != null ? _initialAmountText(t.amount) : '');
+        text: t != null ? formatAmountForInput(t.amount) : '');
     _currency = (t?.currency ?? 'IDR').toUpperCase();
     _type = t?.type ?? 'expense';
     _spendingType = t?.spendingType ?? 'one_time';
@@ -182,7 +137,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
           txnId,
           TransactionInput(
             merchant: _merchantCtrl.text.trim(),
-            amount: _parseAmount(_amountCtrl.text.trim())!,
+            amount: parseAmount(_amountCtrl.text.trim())!,
             currency: _currency,
             type: _type,
             spendingType: _spendingType,
@@ -201,7 +156,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
         for (final item in liveItems) {
           final input = TransactionItemInput(
             description: item.descCtrl.text.trim(),
-            amount: _parseAmount(item.amountCtrl.text.trim()) ?? 0,
+            amount: parseAmount(item.amountCtrl.text.trim()) ?? 0,
             quantity: int.tryParse(item.qtyCtrl.text.trim()) ?? 1,
           );
           if (item.id != null) {
@@ -214,7 +169,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
       } else {
         await widget.api.create(TransactionInput(
           merchant: _merchantCtrl.text.trim(),
-          amount: _parseAmount(_amountCtrl.text.trim())!,
+          amount: parseAmount(_amountCtrl.text.trim())!,
           currency: _currency,
           type: _type,
           spendingType: _spendingType,
@@ -225,7 +180,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
           items: liveItems
               .map((item) => TransactionItemInput(
                     description: item.descCtrl.text.trim(),
-                    amount: _parseAmount(item.amountCtrl.text.trim()) ?? 0,
+                    amount: parseAmount(item.amountCtrl.text.trim()) ?? 0,
                     quantity: int.tryParse(item.qtyCtrl.text.trim()) ?? 1,
                   ))
               .toList(),
@@ -324,10 +279,10 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
                         controller: _amountCtrl,
                         hint: '0',
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        inputFormatters: [_ThousandsSeparatorInputFormatter()],
+                        inputFormatters: [ThousandsSeparatorInputFormatter()],
                         validator: (v) {
                           if (v == null || v.isEmpty) return 'Required';
-                          if (_parseAmount(v) == null) return 'Invalid';
+                          if (parseAmount(v) == null) return 'Invalid';
                           return null;
                         },
                       ),
@@ -651,6 +606,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
               controller: item.amountCtrl,
               textAlign: TextAlign.right,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [ThousandsSeparatorInputFormatter()],
               style: const TextStyle(fontSize: 13, color: Color(0xFF374151)),
               decoration: const InputDecoration(isDense: true, border: InputBorder.none),
             ),
